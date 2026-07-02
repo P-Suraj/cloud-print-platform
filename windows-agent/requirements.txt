@@ -1,0 +1,7 @@
+pywin32>=306
+supabase==2.3.0
+pystray>=0.19.5
+pillow>=10.2.0
+pyinstaller>=6.3.0
+pypdf>=5.0.0
+

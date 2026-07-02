@@ -1,0 +1,13 @@
+{
+    "version": 1,
+    "first_run_completed": true,
+    "printer_name": "HP_LaserJet_Pro",
+    "printer_bw": "HP_LaserJet_Pro",
+    "printer_color": "HP_LaserJet_Pro",
+    "shop_id": "your-shop-uuid-here",
+    "shop_code": "SHOP001",
+    "shop_name": "Example Print Shop",
+    "supabase_url": "https://your-project.supabase.co",
+    "supabase_key": "your-supabase-anon-or-service-key",
+    "supabase_bucket": "print-jobs"
+}

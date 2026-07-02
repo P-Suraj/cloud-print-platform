@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+jspm_packages/
+web_modules/
+
+# Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints
+
+# Build outputs
+dist/
+build/
+out/
+.vercel/
+*.spec
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Database / SQLite files
+backend/autoprint.db
+backend/autoprint.db-shm
+backend/autoprint.db-wal
+*.db
+*.db-shm
+*.db-wal
+
+# Application runtime / temp folders
+windows-agent/printed_output/
+windows-agent/queue/
+windows-agent/temp/
+uploads/
+backend/uploads/
