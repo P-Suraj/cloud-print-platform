@@ -434,6 +434,7 @@ export default function Home() {
   // Job submission: Upload PDF and insert queue row
   async function handleSubmit(e) {
     e.preventDefault();
+    if (uploading) return; // Prevent double-submit: two rapid taps would create duplicate jobs
     if (!shopId) return;
     if (layoutMode === 'document' && files.length === 0) return;
     if (layoutMode === 'id_card' && (!frontFile || !backFile)) {
