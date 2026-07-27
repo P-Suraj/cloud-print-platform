@@ -20,6 +20,7 @@ function formatTime(d) {
 export default function ShopConsole() {
   const { shopId } = useParams();
   const navigate = useNavigate();
+  const [realShopId, setRealShopId] = useState(null); // actual UUID from DB
   const [shopName, setShopName] = useState('');
   const [printMode, setPrintMode] = useState('manual');
   const [isOnline, setIsOnline] = useState(false);
@@ -27,7 +28,7 @@ export default function ShopConsole() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editingJob, setEditingJob] = useState(null);
-  const [activeRightTab, setActiveRightTab] = useState('recent'); // 'recent' or 'history'
+  const [activeRightTab, setActiveRightTab] = useState('recent');
 
   // Shop authentication logic
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -82,14 +83,16 @@ export default function ShopConsole() {
   const [bwSlabs, setBwSlabs] = useState([]);
   const [colorSlabs, setColorSlabs] = useState([]);
 
-  // Fetch jobs
-  const fetchJobs = async () => {
+  // Fetch jobs — MUST use realShopId (UUID), not shopId (which may be a shop_code)
+  const fetchJobs = async (resolvedId) => {
+    const queryId = resolvedId || realShopId;
+    if (!queryId) return;
     try {
       const { data: jobsData, error: jobsErr } = await supabase
         .from('print_jobs')
         .select('*')
-        .eq('shop_id', shopId)
-        .order('created_at', { ascending: false }); // Fetch all so we can scroll through them
+        .eq('shop_id', queryId)
+        .order('created_at', { ascending: false });
 
       if (!jobsErr && jobsData) {
         setJobs(jobsData);
@@ -98,6 +101,11 @@ export default function ShopConsole() {
       console.error('Error fetching jobs:', err);
     }
   };
+
+  // Re-fetch when realShopId resolves
+  useEffect(() => {
+    if (realShopId) fetchJobs(realShopId);
+  }, [realShopId]);
 
   // Approval handlers
   const handleApproveJob = async (jobId) => {
@@ -150,16 +158,17 @@ export default function ShopConsole() {
 
   const handleClearAllRecent = async () => {
     if (!window.confirm('Are you sure you want to clear all recent prints from this view? (They will still remain in History)')) return;
+    const queryId = realShopId || shopId;
     try {
       const { error: err } = await supabase
         .from('print_jobs')
         .update({ cleared_from_console: true })
-        .eq('shop_id', shopId)
+        .eq('shop_id', queryId)
         .neq('status', 'queued');
       if (err) {
         console.error('Error clearing recent prints:', err);
       } else {
-        fetchJobs();
+        fetchJobs(queryId);
       }
     } catch (err) {
       console.error('Error clearing recent prints:', err);
@@ -275,6 +284,7 @@ export default function ShopConsole() {
         }
 
         if (shopData) {
+          setRealShopId(shopData.id); // Store real UUID for all subsequent queries
           setShopName(shopData.name);
           setPrintMode(shopData.print_mode || 'manual');
           setBwSlabs(shopData.bw_slabs || []);
@@ -288,6 +298,7 @@ export default function ShopConsole() {
             setIsOnline(false);
           }
         } else {
+          setRealShopId(shopId);
           setShopName('Print Shop');
           setPrintMode('manual');
           setIsOnline(false);
@@ -301,7 +312,6 @@ export default function ShopConsole() {
     }
 
     fetchShopData();
-    fetchJobs();
 
     const interval = setInterval(() => {
       fetchShopData();
@@ -310,23 +320,23 @@ export default function ShopConsole() {
     return () => clearInterval(interval);
   }, [shopId]);
 
-  // Real-time listener
+  // Realtime subscription — uses realShopId to match UUID in print_jobs table
   useEffect(() => {
-    if (!shopId) return;
+    if (!realShopId) return;
 
     const channel = supabase
-      .channel(`print_jobs_console_${shopId}`)
+      .channel(`print_jobs_console_${realShopId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'print_jobs',
-          filter: `shop_id=eq.${shopId}`
+          filter: `shop_id=eq.${realShopId}`
         },
         (payload) => {
           console.log('Realtime change detected in Console:', payload);
-          fetchJobs();
+          fetchJobs(realShopId);
         }
       )
       .subscribe();
@@ -334,7 +344,7 @@ export default function ShopConsole() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [shopId]);
+  }, [realShopId]);
 
   if (loading) {
     return (

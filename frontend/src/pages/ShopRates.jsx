@@ -6,6 +6,7 @@ import { ArrowLeftIcon } from '../components/Icons';
 export default function ShopRates() {
   const { shopId } = useParams();
   const navigate = useNavigate();
+  const [realShopId, setRealShopId] = useState(null);
   const [shopName, setShopName] = useState('');
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -71,23 +72,36 @@ export default function ShopRates() {
   useEffect(() => {
     async function fetchRates() {
       try {
-        const { data, error: err } = await supabase
-          .from('shops')
-          .select('name, bw_slabs, color_slabs')
-          .eq('id', shopId)
-          .single();
+        const looksLikeUuid = /^[0-9a-f-]{36}$/i.test(shopId);
+        let activeData = null;
 
-        let activeData = data;
-        if (err || !activeData) {
-          activeData = {
-            name: 'Campus Print Shop',
-            bw_slabs: [{ min: 1, max: null, rate: 2.0, duplex_rate: 1.8 }],
-            color_slabs: [{ min: 1, max: null, rate: 10.0, duplex_rate: 9.0 }]
-          };
+        if (!looksLikeUuid) {
+          const { data } = await supabase
+            .from('shops')
+            .select('id, name, bw_slabs, color_slabs')
+            .eq('shop_code', shopId.toUpperCase())
+            .single();
+          activeData = data;
         }
-        setShopName(activeData.name);
-        setBwSlabs(activeData.bw_slabs || [{ min: 1, max: null, rate: 2.0, duplex_rate: 1.8 }]);
-        setColorSlabs(activeData.color_slabs || [{ min: 1, max: null, rate: 10.0, duplex_rate: 9.0 }]);
+
+        if (!activeData) {
+          const { data } = await supabase
+            .from('shops')
+            .select('id, name, bw_slabs, color_slabs')
+            .eq('id', shopId)
+            .single();
+          activeData = data;
+        }
+
+        if (activeData) {
+          setRealShopId(activeData.id);
+          setShopName(activeData.name);
+          setBwSlabs(activeData.bw_slabs || [{ min: 1, max: null, rate: 2.0, duplex_rate: 1.8 }]);
+          setColorSlabs(activeData.color_slabs || [{ min: 1, max: null, rate: 10.0, duplex_rate: 9.0 }]);
+        } else {
+          setRealShopId(shopId);
+          setShopName('Print Shop');
+        }
       } catch (e) {
         console.error('Error fetching rates:', e);
         setError('Failed to connect to database.');
@@ -186,13 +200,14 @@ export default function ShopRates() {
     }
 
     try {
+      const updateId = realShopId || shopId;
       const { error: err } = await supabase
         .from('shops')
         .update({
           bw_slabs: bwSlabs,
           color_slabs: colorSlabs
         })
-        .eq('id', shopId);
+        .eq('id', updateId);
 
       if (err) {
         setError('Failed to update rates: ' + err.message);

@@ -24,6 +24,8 @@ export default function Status() {
 
   // Poll jobs status from Supabase every 2 seconds
   useEffect(() => {
+    let intervalId;
+
     async function fetchJobs() {
       try {
         const { data, error } = await supabase
@@ -32,13 +34,16 @@ export default function Status() {
           .in('id', jobIds);
 
         if (!error && data) {
-          // Maintain the order of jobIds from URL
           const sortedJobs = [...data].sort((a, b) => jobIds.indexOf(a.id) - jobIds.indexOf(b.id));
           setJobs(sortedJobs);
-          
-          // Set initial selected job to first if not set
+
           if (!selectedJobId && sortedJobs.length > 0) {
             setSelectedJobId(sortedJobs[0].id);
+          }
+
+          // Stop polling once all jobs are in a terminal state
+          if (sortedJobs.length > 0 && sortedJobs.every(j => ['completed', 'failed', 'rejected'].includes(j.status))) {
+            clearInterval(intervalId);
           }
         }
       } catch (err) {
@@ -49,18 +54,10 @@ export default function Status() {
     }
 
     fetchJobs();
+    intervalId = setInterval(fetchJobs, 2000);
 
-    const interval = setInterval(() => {
-      fetchJobs();
-    }, 2000);
-
-    // Stop polling if all jobs completed, failed, or rejected
-    if (jobs.length > 0 && jobs.every(j => ['completed', 'failed', 'rejected'].includes(j.status))) {
-      clearInterval(interval);
-    }
-
-    return () => clearInterval(interval);
-  }, [jobId, selectedJobId, jobs.map(j => j.status).join(',')]);
+    return () => clearInterval(intervalId);
+  }, [jobId]);
 
   if (loading) {
     return (
