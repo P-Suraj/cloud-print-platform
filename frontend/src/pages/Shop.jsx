@@ -319,6 +319,8 @@ function SpoolingInkWave() {
 // ── main Shop Console dashboard ──────────────────────────────────────────────
 export default function Shop() {
   const { shopId } = useParams();
+  // realShopId = the actual UUID from DB; shopId from URL may be a shop_code like "TST001"
+  const [realShopId, setRealShopId] = useState(null);
   const [shopName, setShopName] = useState('');
   const [shopCode, setShopCode] = useState('');
   const [printMode, setPrintMode] = useState('manual');
@@ -526,13 +528,11 @@ export default function Shop() {
 
   // Fetch shop metadata and heartbeat
   // IMPORTANT: The URL param `shopId` may be a shop_code (e.g. "TST001") OR a UUID.
-  // We must try shop_code first, then fall back to id, so the agent heartbeat is always read.
+  // Always query by shop_code first so we get the real UUID for job queries.
   useEffect(() => {
     async function fetchShopData() {
       try {
-        // Detect if shopId looks like a UUID (contains hyphens and is long)
         const looksLikeUuid = /^[0-9a-f-]{36}$/i.test(shopId);
-
         let shopData = null;
 
         if (!looksLikeUuid) {
@@ -546,7 +546,7 @@ export default function Shop() {
         }
 
         if (!shopData) {
-          // Fall back to querying by id (for UUID-based routes)
+          // Fall back to querying by UUID
           const { data } = await supabase
             .from('shops')
             .select('id, name, last_seen_at, shop_code, print_mode, bw_slabs, color_slabs, printer_bw, printer_color')
@@ -556,6 +556,8 @@ export default function Shop() {
         }
 
         if (shopData) {
+          // CRITICAL: store the real UUID so job queries use the right shop_id
+          setRealShopId(shopData.id);
           setShopName(shopData.name);
           setShopCode(shopData.shop_code || shopId);
           setPrintMode(shopData.print_mode || 'manual');
@@ -570,7 +572,7 @@ export default function Shop() {
             setIsOnline(false);
           }
         } else {
-          // No DB record found — use safe defaults, never show fake online status
+          setRealShopId(shopId);
           setShopName(shopId.includes('TST001') ? 'Test Hub 1 (Beta Kiosk)' : shopId.includes('TST002') ? 'Test Hub 2 (Lab Kiosk)' : 'Print Shop');
           setShopCode(shopId.toUpperCase());
           setPrintMode('manual');
@@ -596,20 +598,21 @@ export default function Shop() {
     return () => clearInterval(interval);
   }, [shopId]);
 
-  const fetchJobs = async () => {
+  // MUST use realShopId (UUID) for job queries — not the URL param which may be a shop_code
+  const fetchJobs = async (resolvedShopId) => {
+    const queryId = resolvedShopId || realShopId;
+    if (!queryId) return;
     try {
       const { data, error: err } = await supabase
         .from('print_jobs')
         .select('*')
-        .eq('shop_id', shopId)
+        .eq('shop_id', queryId)
         .order('created_at', { ascending: false })
         .limit(20);
 
       if (err) throw err;
-      // Preserve local mock jobs when fetching database updates!
       setJobs(prev => {
         const mockJobs = prev.filter(j => j.isMock);
-        // Deduplicate database items that were marked mock if they somehow match
         const dbJobs = data || [];
         const filteredMockJobs = mockJobs.filter(mj => !dbJobs.some(dj => dj.id === mj.id));
         return [...filteredMockJobs, ...dbJobs];
@@ -619,21 +622,27 @@ export default function Shop() {
     }
   };
 
-  // Realtime subscription setup
+  // Re-fetch jobs whenever realShopId is resolved
   useEffect(() => {
+    if (realShopId) fetchJobs(realShopId);
+  }, [realShopId]);
+
+  // Realtime subscription — use realShopId so it matches the UUID stored in print_jobs
+  useEffect(() => {
+    if (!realShopId) return;
     const channel = supabase
-      .channel(`print_jobs_shop_${shopId}`)
+      .channel(`print_jobs_shop_${realShopId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'print_jobs',
-          filter: `shop_id=eq.${shopId}`
+          filter: `shop_id=eq.${realShopId}`
         },
         (payload) => {
           console.log('Realtime print_jobs change detected:', payload);
-          fetchJobs();
+          fetchJobs(realShopId);
         }
       )
       .subscribe();
@@ -641,7 +650,7 @@ export default function Shop() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [shopId]);
+  }, [realShopId]);
 
   // Monitor job completions to broadcast global Print Pulse wave
   useEffect(() => {

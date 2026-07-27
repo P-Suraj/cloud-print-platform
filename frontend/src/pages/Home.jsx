@@ -244,28 +244,27 @@ export default function Home() {
 
     async function loadShop() {
       try {
+        // Try fetching without is_active filter so test shops work too
         const { data } = await supabase
           .from('shops')
           .select('id, name, shop_code, print_mode, bw_slabs, color_slabs')
           .eq('shop_code', cleanShop)
-          .eq('is_active', true)
           .single();
 
         if (data) {
-          setShopId(data.id); // Use internal UUID for print job submission
+          setShopId(data.id); // CRITICAL: always use the real UUID as shopId for job submission
           setShopName(data.name);
           setShopCode(data.shop_code || cleanShop);
           setPrintMode(data.print_mode || 'manual');
           setBwSlabs(data.bw_slabs || []);
           setColorSlabs(data.color_slabs || []);
         } else {
-          // Robust fallback for test codes like TST001 and TST002
-          const isTst1 = cleanShop.includes('TST001');
-          const isTst2 = cleanShop.includes('TST002');
+          // Shop truly not in DB — warn user but still set shop_code as fallback
           setShopId(cleanShop);
           setShopCode(cleanShop);
-          setShopName(isTst1 ? 'Test Hub 1 (Beta Kiosk)' : (isTst2 ? 'Test Hub 2 (Lab Kiosk)' : `Print Hub (${cleanShop})`));
-          setPrintMode(isTst2 ? 'auto' : 'manual');
+          setShopName(`Print Hub (${cleanShop})`);
+          setPrintMode('manual');
+          setError(`Shop "${cleanShop}" not found. Contact the shopkeeper.`);
         }
       } catch (e) {
         setShopId(cleanShop);
