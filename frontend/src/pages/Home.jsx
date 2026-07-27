@@ -1949,16 +1949,6 @@ export default function Home() {
             );
           })()}
 
-          <p style={{
-            fontSize: '0.75rem',
-            color: 'var(--text-muted)',
-            textAlign: 'center',
-            marginBottom: 8,
-            padding: '0 4px'
-          }}>
-            🔒 Your file is deleted from our servers after printing.
-          </p>
-
           <button
             type="submit"
             className="btn btn-primary"

@@ -51,6 +51,7 @@ function App() {
   const [shopData, setShopData] = useState(null);
   const [agentOnline, setAgentOnline] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [copiedPhone, setCopiedPhone] = useState(false);
@@ -561,7 +562,7 @@ Agent Status: ${shopData ? (agentOnline ? 'Online' : 'Offline') : 'N/A'}`;
       <footer className="autoprint-footer">
         <div className="footer-content">
           <div className="footer-links">
-            <span className="footer-link">Privacy Policy</span>
+            <span className="footer-link" onClick={() => setShowPrivacyModal(true)} style={{ cursor: 'pointer' }}>Privacy Policy</span>
             <span className="footer-link">·</span>
             <span className="footer-link">Terms of Use</span>
             <span className="footer-link">·</span>
@@ -578,6 +579,68 @@ Agent Status: ${shopData ? (agentOnline ? 'Online' : 'Offline') : 'N/A'}`;
           </div>
         </div>
       </footer>
+
+      {/* Privacy Policy Modal */}
+      {showPrivacyModal && (
+        <div className="modal-backdrop" onClick={() => setShowPrivacyModal(false)} style={{ zIndex: 2000 }}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 520, maxHeight: '80vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary-light)', margin: 0 }}>🔒 Privacy Policy</h2>
+              <button onClick={() => setShowPrivacyModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.4rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
+            </div>
+
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>
+              Last updated: July 2026 &nbsp;·&nbsp; AutoPrint by Suraj Pandavula
+            </p>
+
+            {[
+              {
+                icon: '📄',
+                title: 'What we collect',
+                body: 'When you submit a print job, we temporarily store your uploaded file and the print settings you choose (copies, colour mode, paper size, etc.). We do not collect your name, phone number, email, or any personal identity information.'
+              },
+              {
+                icon: '🗑️',
+                title: 'File storage & deletion',
+                body: 'Your uploaded file is stored securely on encrypted cloud servers only for as long as it takes to print. Once your print job is confirmed complete, the file is permanently deleted from our servers automatically. We do not keep copies.'
+              },
+              {
+                icon: '🔐',
+                title: 'Security',
+                body: 'All data is transferred over HTTPS (TLS). Files are stored in access-controlled cloud storage and are never publicly accessible. Only the print shop\'s designated printer agent can download and process your file.'
+              },
+              {
+                icon: '🚫',
+                title: 'We never share your data',
+                body: 'We do not sell, rent, or share your files or print settings with any third party. Your data is used solely to fulfil your print request.'
+              },
+              {
+                icon: '📊',
+                title: 'Analytics',
+                body: 'We collect anonymous, aggregated statistics (e.g. number of jobs per hour, paper size usage) to help us improve the service. These statistics cannot be linked back to any individual user or file.'
+              },
+              {
+                icon: '📬',
+                title: 'Contact',
+                body: 'Questions about your data? Contact the shop owner or reach us at psuraj1947@gmail.com.'
+              }
+            ].map(({ icon, title, body }) => (
+              <div key={title} style={{ marginBottom: 18, padding: '14px 16px', background: 'rgba(255,255,255,0.03)', borderRadius: 10, border: '1px solid var(--border)' }}>
+                <div style={{ fontWeight: 700, color: 'var(--text)', marginBottom: 6, fontSize: '0.9rem' }}>{icon} {title}</div>
+                <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.65, margin: 0 }}>{body}</p>
+              </div>
+            ))}
+
+            <button
+              className="btn btn-secondary"
+              onClick={() => setShowPrivacyModal(false)}
+              style={{ width: '100%', marginTop: 8, fontSize: '0.9rem' }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

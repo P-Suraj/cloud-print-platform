@@ -131,17 +131,6 @@ export default function Status() {
             <div className="success-check"><CheckCircleIcon size={36} color="var(--primary-light)" /></div>
             <h1 className="completed-text" style={{ fontSize: '1.5rem', marginTop: 12 }}>Print Complete!</h1>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Pick up your printout from the printer tray.</p>
-            <p style={{
-              fontSize: '0.78rem',
-              color: 'var(--text-muted)',
-              marginTop: 10,
-              padding: '6px 14px',
-              background: 'rgba(255,255,255,0.04)',
-              borderRadius: 8,
-              border: '1px solid var(--border)'
-            }}>
-              🔒 Your file has been permanently deleted from our servers.
-            </p>
           </>
         ) : isFailed ? (
           <>
