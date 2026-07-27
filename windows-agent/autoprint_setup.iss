@@ -48,10 +48,6 @@ Type: filesandordirs; Name: "{app}"
 Type: filesandordirs; Name: "{localappdata}\AutoPrint"
 
 [Run]
-; Whitelist the installation folder and configuration directory in Windows Defender (best-effort)
-Filename: "powershell.exe"; Parameters: "-WindowStyle Hidden -Command ""Add-MpPreference -ExclusionPath '{app}'"""; Flags: runhidden; StatusMsg: "Configuring local security preferences..."
-Filename: "powershell.exe"; Parameters: "-WindowStyle Hidden -Command ""Add-MpPreference -ExclusionPath '{localappdata}\AutoPrint'"""; Flags: runhidden; StatusMsg: "Configuring local security preferences..."
-
 ; Launch Launcher.exe detached and post-install, without blocking installer termination
 Filename: "{app}\Launcher.exe"; Description: "Launch AutoPrint Agent"; Flags: postinstall nowait
 

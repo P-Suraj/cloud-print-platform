@@ -52,6 +52,7 @@ def convert_word_to_pdf(docx_path, pdf_path) -> int:
     doc = None
     try:
         word = win32com.client.Dispatch("Word.Application")
+        word.AutomationSecurity = 3  # msoAutomationSecurityForceDisable = 3
         word.Visible = False
         
         # Open the Word document
@@ -691,6 +692,9 @@ class PrintAgent:
                         # We try to download all uploaded images
                         idx = 0
                         while True:
+                            if idx >= 16:
+                                logger.info(f"[JOB {job_id}] Photo Grid download limit reached (16 images). Stopping download.")
+                                break
                             # build storage path replacing _img_0 with _img_{idx}
                             storage_path = base_storage_path.replace("_img_0", f"_img_{idx}")
                             temp_img_path = os.path.join(config.TEMP_DIR, f"{job_id}_img_{idx}{img_ext}")
@@ -845,8 +849,14 @@ class PrintAgent:
                                 continue
 
                     # Configure options
+                    raw_copies = job.get("copies", 1)
+                    try:
+                        copies = max(1, min(int(raw_copies), 10))
+                    except (ValueError, TypeError):
+                        copies = 1
+
                     options = {
-                        "copies": job.get("copies", 1),
+                        "copies": copies,
                         "duplex": job.get("duplex", False),
                         "color_mode": job.get("color_mode", "bw"),
                         "page_range": job.get("page_range"),
@@ -862,9 +872,38 @@ class PrintAgent:
                     else:
                         active_printer = self.target_printer_bw
 
-                    # Execute silent print
-                    logger.info(f"[JOB {job_id}] Spooling job to printer '{active_printer}'...")
-                    success, err_msg = executor.print_file(temp_pdf_path, active_printer, options)
+                    # Pre-flight check: configured printer validation (only if not simulation mode)
+                    printer_valid = True
+                    if not config.SIMULATION_MODE:
+                        try:
+                            from printer_manager import enumerate_printers
+                            system_printers = [p.lower() for p in enumerate_printers()]
+                            if active_printer.lower() not in system_printers:
+                                printer_valid = False
+                                success, err_msg = False, f"Configured printer not found: '{active_printer}'"
+                                logger.error(f"[JOB {job_id}] {err_msg}")
+                        except Exception as pe:
+                            logger.warning(f"[JOB {job_id}] Failed to verify system printers list: {pe}")
+
+                    # Pre-flight check: downloaded file validation
+                    file_valid = False
+                    if printer_valid:
+                        if not temp_pdf_path or not os.path.exists(temp_pdf_path):
+                            success, err_msg = False, "Target PDF file does not exist on disk."
+                            logger.error(f"[JOB {job_id}] print pre-flight failed: {err_msg}")
+                        elif os.path.getsize(temp_pdf_path) == 0:
+                            success, err_msg = False, "Target PDF file is empty (0 bytes)."
+                            logger.error(f"[JOB {job_id}] print pre-flight failed: {err_msg}")
+                        elif not temp_pdf_path.lower().endswith(".pdf"):
+                            success, err_msg = False, f"Target file has invalid format: expected .pdf, got '{os.path.splitext(temp_pdf_path)[1]}'"
+                            logger.error(f"[JOB {job_id}] print pre-flight failed: {err_msg}")
+                        else:
+                            file_valid = True
+
+                    if printer_valid and file_valid:
+                        # Execute silent print
+                        logger.info(f"[JOB {job_id}] Spooling job to printer '{active_printer}'...")
+                        success, err_msg = executor.print_file(temp_pdf_path, active_printer, options)
 
                     # Clean up temporary files immediately
                     for path_to_clean in set(temp_files_to_clean):
