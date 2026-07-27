@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import { useShop } from '../hooks/useShop';
 import { PrinterIcon, InfoIcon, FileIcon, ArrowLeftIcon } from '../components/Icons';
 import ShopNav from '../components/ShopNav';
 
@@ -20,12 +21,19 @@ function formatTime(d) {
 export default function ShopConsole() {
   const { shopId } = useParams();
   const navigate = useNavigate();
-  const [realShopId, setRealShopId] = useState(null); // actual UUID from DB
-  const [shopName, setShopName] = useState('');
-  const [printMode, setPrintMode] = useState('manual');
-  const [isOnline, setIsOnline] = useState(false);
+
+  // All shop data via single hook (handles shop_code → UUID lookup)
+  const {
+    realShopId,
+    shopName,
+    printMode,
+    bwSlabs,
+    colorSlabs,
+    isOnline,
+    loading,
+  } = useShop(shopId, { pollInterval: 5000 });
+
   const [jobs, setJobs] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editingJob, setEditingJob] = useState(null);
   const [activeRightTab, setActiveRightTab] = useState('recent');
@@ -80,34 +88,8 @@ export default function ShopConsole() {
     }
   };
 
-  const [bwSlabs, setBwSlabs] = useState([]);
-  const [colorSlabs, setColorSlabs] = useState([]);
 
-  // Fetch jobs — MUST use realShopId (UUID), not shopId (which may be a shop_code)
-  const fetchJobs = async (resolvedId) => {
-    const queryId = resolvedId || realShopId;
-    if (!queryId) return;
-    try {
-      const { data: jobsData, error: jobsErr } = await supabase
-        .from('print_jobs')
-        .select('*')
-        .eq('shop_id', queryId)
-        .order('created_at', { ascending: false });
 
-      if (!jobsErr && jobsData) {
-        setJobs(jobsData);
-      }
-    } catch (err) {
-      console.error('Error fetching jobs:', err);
-    }
-  };
-
-  // Re-fetch when realShopId resolves
-  useEffect(() => {
-    if (realShopId) fetchJobs(realShopId);
-  }, [realShopId]);
-
-  // Approval handlers
   const handleApproveJob = async (jobId) => {
     try {
       const { error: err } = await supabase
@@ -257,68 +239,29 @@ export default function ShopConsole() {
     return (totalPages * matchedRate).toFixed(2);
   };
 
-  // Fetch shop metadata
-  // IMPORTANT: shopId in URL may be a shop_code like "TST001", not a UUID.
-  useEffect(() => {
-    async function fetchShopData() {
-      try {
-        const looksLikeUuid = /^[0-9a-f-]{36}$/i.test(shopId);
-        let shopData = null;
+  // Fetch jobs using realShopId from useShop hook
+  const fetchJobs = async (resolvedId) => {
+    const queryId = resolvedId || realShopId;
+    if (!queryId) return;
+    try {
+      const { data: jobsData, error: jobsErr } = await supabase
+        .from('print_jobs')
+        .select('*')
+        .eq('shop_id', queryId)
+        .order('created_at', { ascending: false });
 
-        if (!looksLikeUuid) {
-          const { data } = await supabase
-            .from('shops')
-            .select('id, name, last_seen_at, print_mode, bw_slabs, color_slabs')
-            .eq('shop_code', shopId.toUpperCase())
-            .single();
-          shopData = data;
-        }
-
-        if (!shopData) {
-          const { data } = await supabase
-            .from('shops')
-            .select('id, name, last_seen_at, print_mode, bw_slabs, color_slabs')
-            .eq('id', shopId)
-            .single();
-          shopData = data;
-        }
-
-        if (shopData) {
-          setRealShopId(shopData.id); // Store real UUID for all subsequent queries
-          setShopName(shopData.name);
-          setPrintMode(shopData.print_mode || 'manual');
-          setBwSlabs(shopData.bw_slabs || []);
-          setColorSlabs(shopData.color_slabs || []);
-
-          if (shopData.last_seen_at) {
-            const lastSeenTime = new Date(shopData.last_seen_at).getTime();
-            const diffSeconds = (Date.now() - lastSeenTime) / 1000;
-            setIsOnline(diffSeconds < 45);
-          } else {
-            setIsOnline(false);
-          }
-        } else {
-          setRealShopId(shopId);
-          setShopName('Print Shop');
-          setPrintMode('manual');
-          setIsOnline(false);
-        }
-      } catch (err) {
-        console.error('Error fetching shop details:', err);
-        setIsOnline(false);
-      } finally {
-        setLoading(false);
+      if (!jobsErr && jobsData) {
+        setJobs(jobsData);
       }
+    } catch (err) {
+      console.error('Error fetching jobs:', err);
     }
+  };
 
-    fetchShopData();
-
-    const interval = setInterval(() => {
-      fetchShopData();
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [shopId]);
+  // Re-fetch jobs when realShopId resolves
+  useEffect(() => {
+    if (realShopId) fetchJobs(realShopId);
+  }, [realShopId]);
 
   // Realtime subscription — uses realShopId to match UUID in print_jobs table
   useEffect(() => {

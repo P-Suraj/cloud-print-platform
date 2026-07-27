@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import { useShop } from '../hooks/useShop';
 import { PrinterIcon, InfoIcon, FileIcon } from '../components/Icons';
 import { generate } from '../services/lean-qr';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -319,19 +320,23 @@ function SpoolingInkWave() {
 // ── main Shop Console dashboard ──────────────────────────────────────────────
 export default function Shop() {
   const { shopId } = useParams();
-  // realShopId = the actual UUID from DB; shopId from URL may be a shop_code like "TST001"
-  const [realShopId, setRealShopId] = useState(null);
-  const [shopName, setShopName] = useState('');
-  const [shopCode, setShopCode] = useState('');
-  const [printMode, setPrintMode] = useState('manual');
-  const [isOnline, setIsOnline] = useState(false);
+
+  // All shop data resolved via single hook (handles shop_code → UUID lookup)
+  const {
+    realShopId,
+    shopName,
+    shopCode,
+    printMode,
+    printerBw,
+    printerColor,
+    isOnline,
+    loading,
+  } = useShop(shopId, { pollInterval: 5000 });
+
   const [jobs, setJobs] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [shimmer, setShimmer] = useState(false);
-  const [printerBw, setPrinterBw] = useState('');
-  const [printerColor, setPrinterColor] = useState('');
   const [heartbeatPulse, setHeartbeatPulse] = useState(false);
   const prevLastSeenRef = useRef(null);
   const prevCompletedRef = useRef([]);
@@ -390,31 +395,20 @@ export default function Shop() {
   };
 
   const handleTogglePrintMode = async (newMode) => {
+    if (!realShopId) return;
     try {
       const { error: err } = await supabase
         .from('shops')
         .update({ print_mode: newMode })
-        .eq('id', shopId);
+        .eq('id', realShopId);
       if (err) throw err;
-      setPrintMode(newMode);
 
-      // Create a telemetry row
-      if (supabase) {
-        supabase
-          .from('telemetry')
-          .insert({
-            shop_id: shopId,
-            event_type: 'print_mode_changed',
-            metadata: {
-              new_mode: newMode
-            }
-          })
-          .then(({ error: telemetryErr }) => {
-            if (telemetryErr) {
-              console.error('Failed to log print_mode_changed telemetry:', telemetryErr);
-            }
-          });
-      }
+      supabase
+        .from('telemetry')
+        .insert({ shop_id: realShopId, event_type: 'print_mode_changed', metadata: { new_mode: newMode } })
+        .then(({ error: telemetryErr }) => {
+          if (telemetryErr) console.error('Failed to log print_mode_changed telemetry:', telemetryErr);
+        });
     } catch (err) {
       console.error('Error calling update_shop_print_mode RPC:', err);
     }
@@ -526,77 +520,8 @@ export default function Shop() {
     setJobs(prev => [mockJob, ...prev]);
   };
 
-  // Fetch shop metadata and heartbeat
-  // IMPORTANT: The URL param `shopId` may be a shop_code (e.g. "TST001") OR a UUID.
-  // Always query by shop_code first so we get the real UUID for job queries.
-  useEffect(() => {
-    async function fetchShopData() {
-      try {
-        const looksLikeUuid = /^[0-9a-f-]{36}$/i.test(shopId);
-        let shopData = null;
-
-        if (!looksLikeUuid) {
-          // shopId is a shop_code like "TST001" — query by shop_code
-          const { data } = await supabase
-            .from('shops')
-            .select('id, name, last_seen_at, shop_code, print_mode, bw_slabs, color_slabs, printer_bw, printer_color')
-            .eq('shop_code', shopId.toUpperCase())
-            .single();
-          shopData = data;
-        }
-
-        if (!shopData) {
-          // Fall back to querying by UUID
-          const { data } = await supabase
-            .from('shops')
-            .select('id, name, last_seen_at, shop_code, print_mode, bw_slabs, color_slabs, printer_bw, printer_color')
-            .eq('id', shopId)
-            .single();
-          shopData = data;
-        }
-
-        if (shopData) {
-          // CRITICAL: store the real UUID so job queries use the right shop_id
-          setRealShopId(shopData.id);
-          setShopName(shopData.name);
-          setShopCode(shopData.shop_code || shopId);
-          setPrintMode(shopData.print_mode || 'manual');
-          setPrinterBw(shopData.printer_bw || '');
-          setPrinterColor(shopData.printer_color || '');
-
-          if (shopData.last_seen_at) {
-            const lastSeenTime = new Date(shopData.last_seen_at).getTime();
-            const diffSeconds = (Date.now() - lastSeenTime) / 1000;
-            setIsOnline(diffSeconds < 45);
-          } else {
-            setIsOnline(false);
-          }
-        } else {
-          setRealShopId(shopId);
-          setShopName(shopId.includes('TST001') ? 'Test Hub 1 (Beta Kiosk)' : shopId.includes('TST002') ? 'Test Hub 2 (Lab Kiosk)' : 'Print Shop');
-          setShopCode(shopId.toUpperCase());
-          setPrintMode('manual');
-          setPrinterBw('');
-          setPrinterColor('');
-          setIsOnline(false);
-        }
-      } catch (err) {
-        console.error('Error fetching shop details:', err);
-        setIsOnline(false);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchShopData();
-    fetchJobs();
-
-    const interval = setInterval(() => {
-      fetchShopData();
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [shopId]);
+  // Fetch initial jobs once realShopId is resolved by useShop()
+  // (polling and realtime handle subsequent updates)
 
   // MUST use realShopId (UUID) for job queries — not the URL param which may be a shop_code
   const fetchJobs = async (resolvedShopId) => {

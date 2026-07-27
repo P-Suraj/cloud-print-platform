@@ -1,14 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../services/supabase';
+import { useShop } from '../hooks/useShop';
 import { ArrowLeftIcon } from '../components/Icons';
 
 export default function ShopRates() {
   const { shopId } = useParams();
   const navigate = useNavigate();
-  const [realShopId, setRealShopId] = useState(null);
-  const [shopName, setShopName] = useState('');
-  const [loading, setLoading] = useState(true);
+
+  // Shop data via hook (no polling needed on rates page)
+  const {
+    realShopId,
+    shopName,
+    bwSlabs: fetchedBwSlabs,
+    colorSlabs: fetchedColorSlabs,
+    loading,
+  } = useShop(shopId, { pollInterval: 0 });
+
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -62,56 +70,18 @@ export default function ShopRates() {
     }
   };
 
-  const [bwSlabs, setBwSlabs] = useState([
-    { min: 1, max: null, rate: 2.0, duplex_rate: 1.8 }
-  ]);
-  const [colorSlabs, setColorSlabs] = useState([
-    { min: 1, max: null, rate: 10.0, duplex_rate: 9.0 }
-  ]);
+  // Local editable copies of slabs (seeded from hook fetch, then editable)
+  const [bwSlabs, setBwSlabs] = useState([{ min: 1, max: null, rate: 2.0, duplex_rate: 1.8 }]);
+  const [colorSlabs, setColorSlabs] = useState([{ min: 1, max: null, rate: 10.0, duplex_rate: 9.0 }]);
+
+  // Seed local slab state from hook once loaded
+  useEffect(() => {
+    if (!loading && fetchedBwSlabs?.length) setBwSlabs(fetchedBwSlabs);
+  }, [loading, JSON.stringify(fetchedBwSlabs)]);
 
   useEffect(() => {
-    async function fetchRates() {
-      try {
-        const looksLikeUuid = /^[0-9a-f-]{36}$/i.test(shopId);
-        let activeData = null;
-
-        if (!looksLikeUuid) {
-          const { data } = await supabase
-            .from('shops')
-            .select('id, name, bw_slabs, color_slabs')
-            .eq('shop_code', shopId.toUpperCase())
-            .single();
-          activeData = data;
-        }
-
-        if (!activeData) {
-          const { data } = await supabase
-            .from('shops')
-            .select('id, name, bw_slabs, color_slabs')
-            .eq('id', shopId)
-            .single();
-          activeData = data;
-        }
-
-        if (activeData) {
-          setRealShopId(activeData.id);
-          setShopName(activeData.name);
-          setBwSlabs(activeData.bw_slabs || [{ min: 1, max: null, rate: 2.0, duplex_rate: 1.8 }]);
-          setColorSlabs(activeData.color_slabs || [{ min: 1, max: null, rate: 10.0, duplex_rate: 9.0 }]);
-        } else {
-          setRealShopId(shopId);
-          setShopName('Print Shop');
-        }
-      } catch (e) {
-        console.error('Error fetching rates:', e);
-        setError('Failed to connect to database.');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchRates();
-  }, [shopId]);
+    if (!loading && fetchedColorSlabs?.length) setColorSlabs(fetchedColorSlabs);
+  }, [loading, JSON.stringify(fetchedColorSlabs)]);
 
   const handleSlabChange = (type, index, field, value) => {
     const list = type === 'bw' ? [...bwSlabs] : [...colorSlabs];
