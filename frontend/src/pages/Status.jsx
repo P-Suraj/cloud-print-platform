@@ -24,6 +24,8 @@ export default function Status() {
 
   // Poll jobs status from Supabase every 2 seconds
   useEffect(() => {
+    let intervalId;
+
     async function fetchJobs() {
       try {
         const { data, error } = await supabase
@@ -32,13 +34,16 @@ export default function Status() {
           .in('id', jobIds);
 
         if (!error && data) {
-          // Maintain the order of jobIds from URL
           const sortedJobs = [...data].sort((a, b) => jobIds.indexOf(a.id) - jobIds.indexOf(b.id));
           setJobs(sortedJobs);
-          
-          // Set initial selected job to first if not set
+
           if (!selectedJobId && sortedJobs.length > 0) {
             setSelectedJobId(sortedJobs[0].id);
+          }
+
+          // Stop polling once all jobs are in a terminal state
+          if (sortedJobs.length > 0 && sortedJobs.every(j => ['completed', 'failed', 'rejected'].includes(j.status))) {
+            clearInterval(intervalId);
           }
         }
       } catch (err) {
@@ -49,18 +54,10 @@ export default function Status() {
     }
 
     fetchJobs();
+    intervalId = setInterval(fetchJobs, 2000);
 
-    const interval = setInterval(() => {
-      fetchJobs();
-    }, 2000);
-
-    // Stop polling if all jobs completed, failed, or rejected
-    if (jobs.length > 0 && jobs.every(j => ['completed', 'failed', 'rejected'].includes(j.status))) {
-      clearInterval(interval);
-    }
-
-    return () => clearInterval(interval);
-  }, [jobId, selectedJobId, jobs.map(j => j.status).join(',')]);
+    return () => clearInterval(intervalId);
+  }, [jobId]);
 
   if (loading) {
     return (
@@ -134,17 +131,6 @@ export default function Status() {
             <div className="success-check"><CheckCircleIcon size={36} color="var(--primary-light)" /></div>
             <h1 className="completed-text" style={{ fontSize: '1.5rem', marginTop: 12 }}>Print Complete!</h1>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Pick up your printout from the printer tray.</p>
-            <p style={{
-              fontSize: '0.78rem',
-              color: 'var(--text-muted)',
-              marginTop: 10,
-              padding: '6px 14px',
-              background: 'rgba(255,255,255,0.04)',
-              borderRadius: 8,
-              border: '1px solid var(--border)'
-            }}>
-              🔒 Your file has been permanently deleted from our servers.
-            </p>
           </>
         ) : isFailed ? (
           <>

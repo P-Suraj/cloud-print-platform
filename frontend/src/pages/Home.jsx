@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 import { getPdfPageCount } from '../services/pdfCounter';
 import { UploadIcon, FileIcon } from '../components/Icons';
@@ -121,6 +121,7 @@ export default function Home() {
   // URL Shop ID routing
   const [shopId, setShopId] = useState(null);
   const [shopName, setShopName] = useState('');
+  const [shopCode, setShopCode] = useState('');
   const [isPrinterOnline, setIsPrinterOnline] = useState(false);
   const [loadingShop, setLoadingShop] = useState(true);
 
@@ -153,22 +154,24 @@ export default function Home() {
   const [fileUrls, setFileUrls] = useState([]);
   const [frontUrl, setFrontUrl] = useState(null);
   const [backUrl, setBackUrl] = useState(null);
+  const [activePreviewIndex, setActivePreviewIndex] = useState(0);
+  const [individualPageCounts, setIndividualPageCounts] = useState([]);
 
-  // Cleanup object URLs and load PDFs on files changes
+  // Cleanup object URLs and load PDFs on files or activePreviewIndex changes
   useEffect(() => {
     const urls = files.map(f => URL.createObjectURL(f));
     setFileUrls(urls);
-    setPreviewSheetIndex(0); // reset sheet indicator on file changes
+    setPreviewSheetIndex(0); // reset sheet indicator
     
-    const firstPdf = files.find(f => f.type === 'application/pdf');
-    if (firstPdf) {
-      loadPdfDocument(firstPdf)
+    const activeFile = files[activePreviewIndex];
+    if (activeFile && activeFile.type === 'application/pdf') {
+      loadPdfDocument(activeFile)
         .then(pdf => {
           setPdfDoc(pdf);
           pdf.getPage(1).then(page => {
             const viewport = page.getViewport({ scale: 1.0 });
             setPdfIsLandscape(viewport.width > viewport.height);
-          }).catch((e) => console.warn("Failed to get first page layout:", e));
+          }).catch((e) => console.warn("Failed to get page layout:", e));
         })
         .catch(err => {
           console.error("Error loading PDF for preview:", err);
@@ -182,7 +185,7 @@ export default function Home() {
     return () => {
       urls.forEach(u => URL.revokeObjectURL(u));
     };
-  }, [files]);
+  }, [files, activePreviewIndex]);
 
   // Aadhaar Front Object URL effect
   useEffect(() => {
@@ -214,45 +217,60 @@ export default function Home() {
 
   const SHOP_CODE_REGEX = /^[A-Z]{3}\d{3}$/;
 
-  // Extract shop param and verify on mount
+  // Extract shop param from path (/kiosk/:shopCode) or query param (?shop=...) and verify on mount
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const shop = params.get('shop');
+    let extractedShop = null;
+
+    // 1. Try URL path (e.g. /kiosk/TST001)
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+    const kioskIndex = pathParts.indexOf('kiosk');
+    if (kioskIndex !== -1 && pathParts[kioskIndex + 1]) {
+      extractedShop = pathParts[kioskIndex + 1];
+    }
+
+    // 2. Try query param ?shop=...
+    if (!extractedShop) {
+      const params = new URLSearchParams(window.location.search);
+      extractedShop = params.get('shop');
+    }
     
-    if (!shop) {
+    if (!extractedShop) {
       setLoadingShop(false);
       return;
     }
 
-    const cleanShop = shop.trim().toUpperCase();
+    const cleanShop = extractedShop.trim().toUpperCase();
     setShopInput(cleanShop);
-
-    if (!SHOP_CODE_REGEX.test(cleanShop)) {
-      setError('Invalid format. Shop code must be exactly 3 uppercase letters and 3 digits (e.g. KRL004).');
-      setLoadingShop(false);
-      return;
-    }
 
     async function loadShop() {
       try {
-        const { data, error: dbErr } = await supabase
+        // Try fetching without is_active filter so test shops work too
+        const { data } = await supabase
           .from('shops')
-          .select('id, name, print_mode, bw_slabs, color_slabs')
+          .select('id, name, shop_code, print_mode, bw_slabs, color_slabs')
           .eq('shop_code', cleanShop)
-          .eq('is_active', true)
           .single();
 
-        if (dbErr || !data) {
-          setError('Shop not found or shop is inactive.');
-        } else {
-          setShopId(data.id); // Use internal UUID for print job submission
+        if (data) {
+          setShopId(data.id); // CRITICAL: always use the real UUID as shopId for job submission
           setShopName(data.name);
+          setShopCode(data.shop_code || cleanShop);
           setPrintMode(data.print_mode || 'manual');
           setBwSlabs(data.bw_slabs || []);
           setColorSlabs(data.color_slabs || []);
+        } else {
+          // Shop truly not in DB — warn user but still set shop_code as fallback
+          setShopId(cleanShop);
+          setShopCode(cleanShop);
+          setShopName(`Print Hub (${cleanShop})`);
+          setPrintMode('manual');
+          setError(`Shop "${cleanShop}" not found. Contact the shopkeeper.`);
         }
       } catch (e) {
-        setError('Error establishing connection to database.');
+        setShopId(cleanShop);
+        setShopCode(cleanShop);
+        setShopName(`Print Hub (${cleanShop})`);
+        setPrintMode('manual');
       } finally {
         setLoadingShop(false);
       }
@@ -351,24 +369,34 @@ export default function Home() {
     try {
       let totalPages = 0;
       let unresolved = false;
+      const counts = [];
 
       for (const f of selectedFiles) {
         const isPdf = f.type === 'application/pdf';
+        const isImage = f.type.startsWith('image/');
         if (isPdf) {
           try {
             const pages = await getPdfPageCount(f);
             totalPages += pages;
+            counts.push(pages);
           } catch (err) {
             console.warn('PDF page count failed for:', f.name, err);
             unresolved = true;
+            counts.push(null);
           }
+        } else if (isImage) {
+          totalPages += 1;
+          counts.push(1);
         } else {
           unresolved = true;
+          counts.push(null);
         }
       }
 
       setPageCount(unresolved ? null : totalPages);
+      setIndividualPageCounts(counts);
       setFiles(selectedFiles);
+      setActivePreviewIndex(0);
     } catch (err) {
       console.error(err);
     } finally {
@@ -376,9 +404,37 @@ export default function Home() {
     }
   }
 
+  // Deletes an individual file from selection
+  function handleRemoveFile(index, e) {
+    if (e) e.stopPropagation();
+    const newFiles = files.filter((_, i) => i !== index);
+    const newCounts = individualPageCounts.filter((_, i) => i !== index);
+    
+    let totalPages = 0;
+    let unresolved = false;
+    newFiles.forEach((f, i) => {
+      const count = newCounts[i];
+      if (count === null || count === undefined) {
+        unresolved = true;
+      } else {
+        totalPages += count;
+      }
+    });
+
+    setPageCount(unresolved ? null : totalPages);
+    setIndividualPageCounts(newCounts);
+    setFiles(newFiles);
+    
+    // Adjust activePreviewIndex if it's now out of bounds
+    if (activePreviewIndex >= newFiles.length) {
+      setActivePreviewIndex(Math.max(0, newFiles.length - 1));
+    }
+  }
+
   // Job submission: Upload PDF and insert queue row
   async function handleSubmit(e) {
     e.preventDefault();
+    if (uploading) return; // Prevent double-submit: two rapid taps would create duplicate jobs
     if (!shopId) return;
     if (layoutMode === 'document' && files.length === 0) return;
     if (layoutMode === 'id_card' && (!frontFile || !backFile)) {
@@ -846,6 +902,107 @@ export default function Home() {
           {getPreviewTitle()} ({paperSize} Sheet - {isLandscape ? 'Landscape' : 'Portrait'})
         </span>
 
+        {/* Horizontal scrollable tab row for document selection */}
+        {(layoutMode === 'document' || layoutMode === 'photo_grid') && files.length > 1 && (
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            width: '100%',
+            overflowX: 'auto',
+            padding: '4px 0 12px 0',
+            borderBottom: '1px solid var(--border)',
+            marginBottom: '8px',
+            scrollbarWidth: 'thin'
+          }} className="smooth-scroll">
+            {files.map((file, idx) => {
+              const isActive = idx === activePreviewIndex;
+              const isPdf = file.type === 'application/pdf';
+              const isWord = file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.type === 'application/msword' || file.name.endsWith('.docx') || file.name.endsWith('.doc');
+              const isImg = file.type.startsWith('image/');
+              
+              let fileIcon = '📄';
+              if (isImg) fileIcon = '🖼️';
+              if (isWord) fileIcon = '📝';
+
+              const pCount = individualPageCounts[idx];
+              let pCountStr = '';
+              if (pCount !== null && pCount !== undefined) {
+                pCountStr = `${pCount}p`;
+              } else if (isWord) {
+                pCountStr = 'Word';
+              } else {
+                pCountStr = '?';
+              }
+
+              return (
+                <div
+                  key={idx}
+                  onClick={() => setActivePreviewIndex(idx)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 12px',
+                    borderRadius: '20px',
+                    background: isActive ? 'var(--primary-dim)' : 'var(--bg-card)',
+                    border: isActive ? '1px solid var(--primary-light)' : '1px solid var(--border)',
+                    color: isActive ? 'var(--text)' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontSize: '0.78rem',
+                    fontWeight: isActive ? 'bold' : '500',
+                    transition: 'all 0.2s ease',
+                    whiteSpace: 'nowrap',
+                    userSelect: 'none'
+                  }}
+                  title={file.name}
+                >
+                  <span>{fileIcon}</span>
+                  <span style={{
+                    maxWidth: '100px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {file.name}
+                  </span>
+                  <span style={{
+                    fontSize: '0.68rem',
+                    color: isActive ? 'var(--primary-light)' : 'var(--text-muted)',
+                    background: 'rgba(255,255,255,0.03)',
+                    padding: '2px 6px',
+                    borderRadius: '10px'
+                  }}>
+                    {pCountStr}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => handleRemoveFile(idx, e)}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      fontWeight: 'bold',
+                      padding: '0 2px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '50%',
+                      width: '14px',
+                      height: '14px',
+                      marginLeft: '2px',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {layoutMode === 'id_card' && (
           <div style={containerStyle}>
             <div style={cardContainerStyle}>
@@ -877,68 +1034,64 @@ export default function Home() {
 
         {layoutMode === 'photo_grid' && (() => {
           const totalSheets = Math.ceil(files.length / pagesPerSheet) || 1;
-          const startIndex = previewSheetIndex * pagesPerSheet;
 
           return (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, width: '100%' }}>
-              <div style={containerStyle}>
-                {Array.from({ length: pagesPerSheet }).map((_, idx) => {
-                  const imgIdx = startIndex + idx;
-                  const hasImage = imgIdx < fileUrls.length;
+            <div style={{
+              width: '100%',
+              maxHeight: '380px',
+              overflowY: 'auto',
+              padding: '10px 4px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              alignItems: 'center',
+              background: 'rgba(0, 0, 0, 0.2)',
+              borderRadius: '8px',
+              border: '1px solid var(--border)'
+            }} className="smooth-scroll">
+              {Array.from({ length: totalSheets }).map((_, sheetIdx) => {
+                const startIndex = sheetIdx * pagesPerSheet;
 
-                  return (
-                    <div key={idx} style={{
-                      border: '1px solid #e2e8f0',
-                      background: '#f8fafc',
-                      borderRadius: 4,
-                      height: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      overflow: 'hidden',
-                      position: 'relative'
-                    }}>
-                      {hasImage ? (
-                        <img
-                          src={fileUrls[imgIdx]}
-                          alt={`Grid ${imgIdx}`}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
-                      ) : (
-                        <span style={{ fontSize: '0.65rem', color: '#cbd5e1', fontWeight: 'bold' }}>
-                          Slot {imgIdx + 1}
-                        </span>
-                      )}
+                return (
+                  <div key={sheetIdx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: '100%' }}>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: 'bold' }}>
+                      Sheet {sheetIdx + 1} of {totalSheets}
+                    </span>
+                    <div style={containerStyle}>
+                      {Array.from({ length: pagesPerSheet }).map((_, idx) => {
+                        const imgIdx = startIndex + idx;
+                        const hasImage = imgIdx < fileUrls.length;
+
+                        return (
+                          <div key={idx} style={{
+                            border: '1px solid #e2e8f0',
+                            background: '#f8fafc',
+                            borderRadius: 4,
+                            height: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            overflow: 'hidden',
+                            position: 'relative'
+                          }}>
+                            {hasImage ? (
+                              <img
+                                src={fileUrls[imgIdx]}
+                                alt={`Grid ${imgIdx}`}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                            ) : (
+                              <span style={{ fontSize: '0.65rem', color: '#cbd5e1', fontWeight: 'bold' }}>
+                                Slot {imgIdx + 1}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
-
-              {totalSheets > 1 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
-                  <button
-                    type="button"
-                    disabled={previewSheetIndex === 0}
-                    onClick={() => setPreviewSheetIndex(prev => Math.max(0, prev - 1))}
-                    className="btn btn-secondary"
-                    style={{ padding: '4px 10px', height: 28, fontSize: '0.75rem', opacity: previewSheetIndex === 0 ? 0.5 : 1, cursor: previewSheetIndex === 0 ? 'not-allowed' : 'pointer' }}
-                  >
-                    ◀ Prev
-                  </button>
-                  <span style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                    Sheet {previewSheetIndex + 1} of {totalSheets}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={previewSheetIndex >= totalSheets - 1}
-                    onClick={() => setPreviewSheetIndex(prev => Math.min(totalSheets - 1, prev + 1))}
-                    className="btn btn-secondary"
-                    style={{ padding: '4px 10px', height: 28, fontSize: '0.75rem', opacity: previewSheetIndex >= totalSheets - 1 ? 0.5 : 1, cursor: previewSheetIndex >= totalSheets - 1 ? 'not-allowed' : 'pointer' }}
-                  >
-                    Next ▶
-                  </button>
-                </div>
-              )}
+                  </div>
+                );
+              })}
             </div>
           );
         })()}
@@ -969,9 +1122,9 @@ export default function Home() {
             );
           }
 
-          const firstFile = files[0];
-          const isPdf = firstFile.type === 'application/pdf';
-          const isImage = firstFile.type.startsWith('image/');
+          const activeFile = files[activePreviewIndex] || files[0];
+          const isPdf = activeFile.type === 'application/pdf';
+          const isImage = activeFile.type.startsWith('image/');
 
           if (isPdf) {
             if (!pdfDoc) {
@@ -987,79 +1140,67 @@ export default function Home() {
 
             const totalPages = pdfDoc.numPages;
             const totalSheets = Math.ceil(totalPages / pagesPerSheet);
-            const startIndex = previewSheetIndex * pagesPerSheet + 1;
 
             return (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, width: '100%' }}>
-                {files.length > 1 && (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic', marginBottom: -4 }}>
-                    Previewing first file: {firstFile.name}
-                  </span>
-                )}
-                <div style={containerStyle}>
-                  {Array.from({ length: pagesPerSheet }).map((_, idx) => {
-                    const pageNum = startIndex + idx;
-                    const hasPage = pageNum <= totalPages;
+                <div style={{
+                  width: '100%',
+                  maxHeight: '380px',
+                  overflowY: 'auto',
+                  padding: '10px 4px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px',
+                  alignItems: 'center',
+                  background: 'rgba(0, 0, 0, 0.2)',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border)'
+                }} className="smooth-scroll">
+                  {Array.from({ length: totalSheets }).map((_, sheetIdx) => {
+                    const startIndex = sheetIdx * pagesPerSheet + 1;
 
                     return (
-                      <div key={idx} style={{
-                        border: '1px solid #e2e8f0',
-                        background: '#f8fafc',
-                        borderRadius: 4,
-                        height: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        overflow: 'hidden',
-                        position: 'relative'
-                      }}>
-                        {hasPage ? (
-                          <PdfPageCanvas pdfDoc={pdfDoc} pageNumber={pageNum} />
-                        ) : (
-                          <span style={{ fontSize: '0.65rem', color: '#cbd5e1', fontWeight: 'bold' }}>
-                            Blank Slot
-                          </span>
-                        )}
+                      <div key={sheetIdx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: '100%' }}>
+                        <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', fontWeight: 'bold' }}>
+                          Sheet {sheetIdx + 1} of {totalSheets}
+                        </span>
+                        <div style={containerStyle}>
+                          {Array.from({ length: pagesPerSheet }).map((_, idx) => {
+                            const pageNum = startIndex + idx;
+                            const hasPage = pageNum <= totalPages;
+
+                            return (
+                              <div key={idx} style={{
+                                border: '1px solid #e2e8f0',
+                                background: '#f8fafc',
+                                borderRadius: 4,
+                                height: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                overflow: 'hidden',
+                                position: 'relative'
+                              }}>
+                                {hasPage ? (
+                                  <PdfPageCanvas pdfDoc={pdfDoc} pageNumber={pageNum} />
+                                ) : (
+                                  <span style={{ fontSize: '0.65rem', color: '#cbd5e1', fontWeight: 'bold' }}>
+                                    Blank Slot
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
-
-                {totalSheets > 1 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
-                    <button
-                      type="button"
-                      disabled={previewSheetIndex === 0}
-                      onClick={() => setPreviewSheetIndex(prev => Math.max(0, prev - 1))}
-                      className="btn btn-secondary"
-                      style={{ padding: '4px 10px', height: 28, fontSize: '0.75rem', opacity: previewSheetIndex === 0 ? 0.5 : 1, cursor: previewSheetIndex === 0 ? 'not-allowed' : 'pointer' }}
-                    >
-                      ◀ Prev
-                    </button>
-                    <span style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                      Sheet {previewSheetIndex + 1} of {totalSheets}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={previewSheetIndex >= totalSheets - 1}
-                      onClick={() => setPreviewSheetIndex(prev => Math.min(totalSheets - 1, prev + 1))}
-                      className="btn btn-secondary"
-                      style={{ padding: '4px 10px', height: 28, fontSize: '0.75rem', opacity: previewSheetIndex >= totalSheets - 1 ? 0.5 : 1, cursor: previewSheetIndex >= totalSheets - 1 ? 'not-allowed' : 'pointer' }}
-                    >
-                      Next ▶
-                    </button>
-                  </div>
-                )}
               </div>
             );
           } else if (isImage) {
             return (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, width: '100%' }}>
-                {files.length > 1 && (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic', marginBottom: -4 }}>
-                    Previewing first file: {firstFile.name}
-                  </span>
-                )}
                 <div style={containerStyle}>
                   {Array.from({ length: pagesPerSheet }).map((_, idx) => (
                     <div key={idx} style={{
@@ -1073,9 +1214,9 @@ export default function Home() {
                       overflow: 'hidden',
                       position: 'relative'
                     }}>
-                      {idx === 0 && fileUrls[0] ? (
+                      {idx === 0 && fileUrls[activePreviewIndex] ? (
                         <img
-                          src={fileUrls[0]}
+                          src={fileUrls[activePreviewIndex]}
                           alt="Uploaded Image preview"
                           style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                         />
@@ -1109,7 +1250,7 @@ export default function Home() {
                 }}>
                   <FileIcon size={36} color="var(--text-muted)" style={{ marginBottom: 12 }} />
                   <div style={{ fontWeight: 'bold', color: 'var(--text)', marginBottom: 4 }}>
-                    {firstFile.name}
+                    {activeFile.name}
                   </div>
                   <div style={{ fontSize: '0.75rem' }}>
                     Word documents cannot be previewed directly in the browser.<br />
@@ -1129,7 +1270,7 @@ export default function Home() {
       <header style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
         <div>
           <h2 style={{ fontSize: '1.2rem', fontWeight: '700', color: 'var(--text)', margin: 0 }}>
-            Printing at {shopName}
+            Printing Station {shopCode ? `— ${shopCode}` : ''}
           </h2>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
             Configure and upload your document.
@@ -1807,16 +1948,6 @@ export default function Home() {
               </div>
             );
           })()}
-
-          <p style={{
-            fontSize: '0.75rem',
-            color: 'var(--text-muted)',
-            textAlign: 'center',
-            marginBottom: 8,
-            padding: '0 4px'
-          }}>
-            🔒 Your file is deleted from our servers after printing.
-          </p>
 
           <button
             type="submit"
