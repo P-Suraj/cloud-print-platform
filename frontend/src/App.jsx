@@ -446,18 +446,11 @@ Agent Status: ${shopData ? (agentOnline ? 'Online' : 'Offline') : 'N/A'}`;
                   <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
                     <button
                       onClick={() => setFeedbackModalOpen(false)}
-                      className="btn btn-secondary"
-                      style={{ padding: '0 18px', height: 38, fontSize: '0.82rem', fontWeight: 'bold' }}
-                    >
-                      Close Window
-                    </button>
-                    <a
-                      href="/admin"
                       className="btn btn-primary"
-                      style={{ padding: '0 18px', height: 38, fontSize: '0.82rem', fontWeight: 'bold', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                      style={{ padding: '0 24px', height: 38, fontSize: '0.82rem', fontWeight: 'bold' }}
                     >
-                      🛡️ Open Admin Portal
-                    </a>
+                      Done
+                    </button>
                   </div>
                 </div>
               ) : (

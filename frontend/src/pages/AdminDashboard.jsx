@@ -2,19 +2,72 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 
+// ── Developer access gate ─────────────────────────────────────────────────────
+// This page is NOT for shopkeepers. Only developers know the access key.
+const DEV_ACCESS_KEY = import.meta.env.VITE_ADMIN_KEY || 'autoprint-dev-2025';
+
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState('bugs'); // 'analytics', 'bugs', 'feedback', 'features'
+  // Gate: require dev password per session
+  const [devUnlocked, setDevUnlocked] = useState(
+    sessionStorage.getItem('autoprint_dev_unlocked') === 'true'
+  );
+  const [devKeyInput, setDevKeyInput] = useState('');
+  const [devKeyError, setDevKeyError] = useState('');
+
+  const handleDevUnlock = (e) => {
+    e.preventDefault();
+    if (devKeyInput === DEV_ACCESS_KEY) {
+      sessionStorage.setItem('autoprint_dev_unlocked', 'true');
+      setDevUnlocked(true);
+    } else {
+      setDevKeyError('Incorrect access key.');
+      setDevKeyInput('');
+    }
+  };
+
+  if (!devUnlocked) {
+    return (
+      <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg, #0f0f13)', padding: 24 }}>
+        <div style={{ width: '100%', maxWidth: 360, background: 'var(--bg-card, #1a1a22)', border: '1px solid var(--border, rgba(255,255,255,0.1))', borderRadius: 14, padding: 32, textAlign: 'center' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 16 }}>🔐</div>
+          <h2 style={{ margin: '0 0 6px 0', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text, #fff)' }}>
+            Developer Portal
+          </h2>
+          <p style={{ margin: '0 0 24px 0', fontSize: '0.82rem', color: 'var(--text-muted, #888)' }}>
+            This area is restricted to AutoPrint developers only.
+          </p>
+          <form onSubmit={handleDevUnlock} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <input
+              type="password"
+              autoFocus
+              placeholder="Enter developer access key"
+              value={devKeyInput}
+              onChange={e => { setDevKeyInput(e.target.value); setDevKeyError(''); }}
+              style={{ width: '100%', height: 42, borderRadius: 8, border: '1px solid var(--border, rgba(255,255,255,0.15))', background: 'rgba(255,255,255,0.04)', color: 'var(--text, #fff)', padding: '0 14px', fontSize: '0.9rem', boxSizing: 'border-box', textAlign: 'center', letterSpacing: 2 }}
+            />
+            {devKeyError && <p style={{ color: '#ef4444', fontSize: '0.78rem', margin: 0 }}>{devKeyError}</p>}
+            <button
+              type="submit"
+              style={{ height: 42, borderRadius: 8, background: 'var(--primary, #6366f1)', color: '#fff', fontWeight: 700, fontSize: '0.9rem', border: 'none', cursor: 'pointer' }}
+            >
+              Unlock
+            </button>
+          </form>
+        </div>
+      </main>
+    );
+  }
+
+  // ── Actual admin dashboard (only visible after dev unlock) ──────────────────
+  const [activeTab, setActiveTab] = useState('bugs');
   const [reports, setReports] = useState([]);
   const [stats, setStats] = useState({
-    totalJobs: 0,
-    totalRevenue: 0,
-    activeShopsCount: 0,
-    openBugsCount: 0,
-    feedbackCount: 0
+    totalJobs: 0, totalRevenue: 0, activeShopsCount: 0, openBugsCount: 0, feedbackCount: 0
   });
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'open', 'resolved'
+  const [statusFilter, setStatusFilter] = useState('all');
+
 
   useEffect(() => {
     fetchDashboardData();
