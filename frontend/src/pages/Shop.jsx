@@ -572,7 +572,14 @@ export default function Shop() {
         setPrintMode(activeShop.print_mode || 'manual');
         setPrinterBw(activeShop.printer_bw || '');
         setPrinterColor(activeShop.printer_color || '');
-        setIsOnline(true);
+
+        if (activeShop.last_seen_at) {
+          const lastSeenTime = new Date(activeShop.last_seen_at).getTime();
+          const diffSeconds = (Date.now() - lastSeenTime) / 1000;
+          setIsOnline(diffSeconds < 45);
+        } else {
+          setIsOnline(false);
+        }
       } catch (err) {
         console.error('Error fetching shop details:', err);
       } finally {
