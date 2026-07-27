@@ -542,27 +542,27 @@ export default function Shop() {
               name: 'Test Hub 1 (Beta Kiosk)',
               shop_code: 'TST001',
               print_mode: 'manual',
-              printer_bw: 'HP LaserJet Pro M404',
-              printer_color: 'Epson L805 Color',
-              last_seen_at: new Date().toISOString()
+              printer_bw: '',
+              printer_color: '',
+              last_seen_at: null
             };
           } else if (upperId === 'TST002' || upperId.includes('TST002')) {
             activeShop = {
               name: 'Test Hub 2 (Lab Kiosk)',
               shop_code: 'TST002',
               print_mode: 'auto',
-              printer_bw: 'Canon ImageRUNNER',
-              printer_color: 'Brother HL-L8360CDW',
-              last_seen_at: new Date().toISOString()
+              printer_bw: '',
+              printer_color: '',
+              last_seen_at: null
             };
           } else {
             activeShop = {
               name: 'Campus Print Shop',
               shop_code: 'SHOP001',
               print_mode: 'manual',
-              printer_bw: 'HP LaserJet Pro',
-              printer_color: 'Epson L805',
-              last_seen_at: new Date().toISOString()
+              printer_bw: '',
+              printer_color: '',
+              last_seen_at: null
             };
           }
         }
@@ -570,8 +570,8 @@ export default function Shop() {
         setShopName(activeShop.name);
         setShopCode(activeShop.shop_code || 'SHOP001');
         setPrintMode(activeShop.print_mode || 'manual');
-        setPrinterBw(activeShop.printer_bw || 'HP LaserJet Pro');
-        setPrinterColor(activeShop.printer_color || 'Epson L805');
+        setPrinterBw(activeShop.printer_bw || '');
+        setPrinterColor(activeShop.printer_color || '');
         setIsOnline(true);
       } catch (err) {
         console.error('Error fetching shop details:', err);
