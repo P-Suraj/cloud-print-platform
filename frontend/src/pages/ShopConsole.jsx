@@ -249,40 +249,52 @@ export default function ShopConsole() {
   };
 
   // Fetch shop metadata
+  // IMPORTANT: shopId in URL may be a shop_code like "TST001", not a UUID.
   useEffect(() => {
     async function fetchShopData() {
       try {
-        const { data: shopData, error: shopErr } = await supabase
-          .from('shops')
-          .select('name, last_seen_at, print_mode, bw_slabs, color_slabs')
-          .eq('id', shopId)
-          .single();
+        const looksLikeUuid = /^[0-9a-f-]{36}$/i.test(shopId);
+        let shopData = null;
 
-        let activeShop = shopData;
-        if (shopErr || !activeShop) {
-          activeShop = {
-            name: 'Campus Print Shop',
-            print_mode: 'manual',
-            bw_slabs: [{ min: 1, max: null, rate: 2.0, duplex_rate: 1.8 }],
-            color_slabs: [{ min: 1, max: null, rate: 10.0, duplex_rate: 9.0 }],
-            last_seen_at: new Date().toISOString()
-          };
+        if (!looksLikeUuid) {
+          const { data } = await supabase
+            .from('shops')
+            .select('id, name, last_seen_at, print_mode, bw_slabs, color_slabs')
+            .eq('shop_code', shopId.toUpperCase())
+            .single();
+          shopData = data;
         }
 
-        setShopName(activeShop.name);
-        setPrintMode(activeShop.print_mode || 'manual');
-        setBwSlabs(activeShop.bw_slabs || []);
-        setColorSlabs(activeShop.color_slabs || []);
+        if (!shopData) {
+          const { data } = await supabase
+            .from('shops')
+            .select('id, name, last_seen_at, print_mode, bw_slabs, color_slabs')
+            .eq('id', shopId)
+            .single();
+          shopData = data;
+        }
 
-        if (activeShop.last_seen_at) {
-          const lastSeenTime = new Date(activeShop.last_seen_at).getTime();
-          const diffSeconds = (Date.now() - lastSeenTime) / 1000;
-          setIsOnline(diffSeconds < 45);
+        if (shopData) {
+          setShopName(shopData.name);
+          setPrintMode(shopData.print_mode || 'manual');
+          setBwSlabs(shopData.bw_slabs || []);
+          setColorSlabs(shopData.color_slabs || []);
+
+          if (shopData.last_seen_at) {
+            const lastSeenTime = new Date(shopData.last_seen_at).getTime();
+            const diffSeconds = (Date.now() - lastSeenTime) / 1000;
+            setIsOnline(diffSeconds < 45);
+          } else {
+            setIsOnline(false);
+          }
         } else {
+          setShopName('Print Shop');
+          setPrintMode('manual');
           setIsOnline(false);
         }
       } catch (err) {
         console.error('Error fetching shop details:', err);
+        setIsOnline(false);
       } finally {
         setLoading(false);
       }

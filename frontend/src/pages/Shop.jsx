@@ -525,63 +525,62 @@ export default function Shop() {
   };
 
   // Fetch shop metadata and heartbeat
+  // IMPORTANT: The URL param `shopId` may be a shop_code (e.g. "TST001") OR a UUID.
+  // We must try shop_code first, then fall back to id, so the agent heartbeat is always read.
   useEffect(() => {
     async function fetchShopData() {
       try {
-        const { data: shopData, error: shopErr } = await supabase
-          .from('shops')
-          .select('name, last_seen_at, shop_code, print_mode, bw_slabs, color_slabs, printer_bw, printer_color')
-          .eq('id', shopId)
-          .single();
+        // Detect if shopId looks like a UUID (contains hyphens and is long)
+        const looksLikeUuid = /^[0-9a-f-]{36}$/i.test(shopId);
 
-        let activeShop = shopData;
-        if (shopErr || !activeShop) {
-          const upperId = (shopId || '').toUpperCase();
-          if (upperId === 'TST001' || upperId.includes('TST001')) {
-            activeShop = {
-              name: 'Test Hub 1 (Beta Kiosk)',
-              shop_code: 'TST001',
-              print_mode: 'manual',
-              printer_bw: '',
-              printer_color: '',
-              last_seen_at: null
-            };
-          } else if (upperId === 'TST002' || upperId.includes('TST002')) {
-            activeShop = {
-              name: 'Test Hub 2 (Lab Kiosk)',
-              shop_code: 'TST002',
-              print_mode: 'auto',
-              printer_bw: '',
-              printer_color: '',
-              last_seen_at: null
-            };
-          } else {
-            activeShop = {
-              name: 'Campus Print Shop',
-              shop_code: 'SHOP001',
-              print_mode: 'manual',
-              printer_bw: '',
-              printer_color: '',
-              last_seen_at: null
-            };
-          }
+        let shopData = null;
+
+        if (!looksLikeUuid) {
+          // shopId is a shop_code like "TST001" — query by shop_code
+          const { data } = await supabase
+            .from('shops')
+            .select('id, name, last_seen_at, shop_code, print_mode, bw_slabs, color_slabs, printer_bw, printer_color')
+            .eq('shop_code', shopId.toUpperCase())
+            .single();
+          shopData = data;
         }
 
-        setShopName(activeShop.name);
-        setShopCode(activeShop.shop_code || 'SHOP001');
-        setPrintMode(activeShop.print_mode || 'manual');
-        setPrinterBw(activeShop.printer_bw || '');
-        setPrinterColor(activeShop.printer_color || '');
+        if (!shopData) {
+          // Fall back to querying by id (for UUID-based routes)
+          const { data } = await supabase
+            .from('shops')
+            .select('id, name, last_seen_at, shop_code, print_mode, bw_slabs, color_slabs, printer_bw, printer_color')
+            .eq('id', shopId)
+            .single();
+          shopData = data;
+        }
 
-        if (activeShop.last_seen_at) {
-          const lastSeenTime = new Date(activeShop.last_seen_at).getTime();
-          const diffSeconds = (Date.now() - lastSeenTime) / 1000;
-          setIsOnline(diffSeconds < 45);
+        if (shopData) {
+          setShopName(shopData.name);
+          setShopCode(shopData.shop_code || shopId);
+          setPrintMode(shopData.print_mode || 'manual');
+          setPrinterBw(shopData.printer_bw || '');
+          setPrinterColor(shopData.printer_color || '');
+
+          if (shopData.last_seen_at) {
+            const lastSeenTime = new Date(shopData.last_seen_at).getTime();
+            const diffSeconds = (Date.now() - lastSeenTime) / 1000;
+            setIsOnline(diffSeconds < 45);
+          } else {
+            setIsOnline(false);
+          }
         } else {
+          // No DB record found — use safe defaults, never show fake online status
+          setShopName(shopId.includes('TST001') ? 'Test Hub 1 (Beta Kiosk)' : shopId.includes('TST002') ? 'Test Hub 2 (Lab Kiosk)' : 'Print Shop');
+          setShopCode(shopId.toUpperCase());
+          setPrintMode('manual');
+          setPrinterBw('');
+          setPrinterColor('');
           setIsOnline(false);
         }
       } catch (err) {
         console.error('Error fetching shop details:', err);
+        setIsOnline(false);
       } finally {
         setLoading(false);
       }
