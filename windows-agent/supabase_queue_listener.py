@@ -126,12 +126,15 @@ class SupabaseQueueListener(QueueListener):
             self.logger.info(f"Deleting cloud file '{file_path}' from Supabase Storage bucket '{config.SUPABASE_BUCKET}'...")
             self.client.storage.from_(config.SUPABASE_BUCKET).remove([file_path])
             self.logger.info(f"Successfully deleted cloud file '{file_path}' from Supabase Storage.")
-            # Record deletion timestamp in database for audit trail
+            # Record deletion timestamp in database for audit trail and null out stale file_path
             if job_id:
                 try:
                     now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-                    self.client.table("print_jobs").update({"file_deleted_at": now_iso}).eq("id", job_id).execute()
-                    self.logger.info(f"Recorded file_deleted_at for job {job_id}.")
+                    self.client.table("print_jobs").update({
+                        "file_deleted_at": now_iso,
+                        "file_path": None
+                    }).eq("id", job_id).execute()
+                    self.logger.info(f"Recorded file_deleted_at and nulled file_path for job {job_id}.")
                 except Exception as db_err:
                     self.logger.warning(f"Failed to record file_deleted_at for job {job_id}: {db_err}")
         except Exception as e:
