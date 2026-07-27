@@ -158,15 +158,12 @@ Agent Status: ${shopData ? (agentOnline ? 'Online' : 'Offline') : 'N/A'}`;
     try {
       const stored = localStorage.getItem('autoprint_recent_jobs');
       if (stored) {
-        return JSON.parse(stored);
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch (e) {}
-    // Sample jobs if no local history found
-    return [
-      { id: 'job-101', file_name: 'thesis_final_draft.pdf', doc_format: '.pdf', page_count: 8, copies: 1, color_mode: 'bw', duplex: true, status: 'failed', job_error: 'Paper Jam in Printer Tray 2' },
-      { id: 'job-102', file_name: 'university_id_card.pdf', doc_format: '.pdf', page_count: 1, copies: 2, color_mode: 'color', duplex: false, status: 'completed', job_error: null },
-      { id: 'job-103', file_name: 'lab_experiment_notes.pdf', doc_format: '.pdf', page_count: 14, copies: 1, color_mode: 'bw', duplex: true, status: 'queued', job_error: null }
-    ];
+    // Return empty — no fake jobs. The user must have submitted a real print job.
+    return [];
   };
 
   const openFeedbackModal = (type = 'bug') => {
@@ -499,9 +496,15 @@ Agent Status: ${shopData ? (agentOnline ? 'Online' : 'Offline') : 'N/A'}`;
                         </option>
                       ))}
                     </select>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>
-                      🔒 Auto-attaches document format (.pdf) and job telemetry. Original PDF file will <strong>not</strong> be uploaded.
-                    </div>
+                    {getRecentPrintJobs().length === 0 ? (
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                        ℹ️ No recent print jobs found on this device. Submit a job first to attach it to a report.
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                        🔒 Auto-attaches document format (.pdf) and job telemetry. Original PDF file will <strong>not</strong> be uploaded.
+                      </div>
+                    )}
                   </div>
 
                   {/* Message Input with 500 character limitation */}
