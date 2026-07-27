@@ -404,13 +404,13 @@ export default function Shop() {
       if (err) throw err;
 
       supabase
-        .from('telemetry')
+        .from('events')
         .insert({ shop_id: realShopId, event_type: 'print_mode_changed', metadata: { new_mode: newMode } })
         .then(({ error: telemetryErr }) => {
           if (telemetryErr) console.error('Failed to log print_mode_changed telemetry:', telemetryErr);
         });
     } catch (err) {
-      console.error('Error calling update_shop_print_mode RPC:', err);
+      console.error('Error toggling print mode:', err);
     }
   };
 
