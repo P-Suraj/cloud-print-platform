@@ -527,6 +527,9 @@ class PrintAgent:
                 last_heartbeat_time = current_time
                 if config.USE_CLOUD_QUEUE and listener is not None:
                     listener.send_heartbeat(bw_printer=self.target_printer_bw, color_printer=self.target_printer_color)
+                    # Retry any storage deletions that failed previously (network timeout etc.)
+                    if hasattr(listener, "retry_pending_deletions"):
+                        listener.retry_pending_deletions()
 
             try:
                 job = listener.poll_for_next_job()

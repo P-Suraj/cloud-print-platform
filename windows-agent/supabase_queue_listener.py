@@ -62,21 +62,30 @@ class SupabaseQueueListener(QueueListener):
     def update_job_status(self, job_id, status, error_message=None, page_count=None, file_path=None):
         """
         Updates the job row in Supabase print_jobs table with final status.
+        Also records analytics timestamps: started_printing_at when processing begins,
+        completed_at when printing finishes.
         Re-raises exceptions on network failures.
         """
         try:
+            now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
             updates = {
                 "status": status,
-                "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
+                "updated_at": now_iso
             }
             if error_message:
                 updates["error"] = error_message
             else:
                 updates["error"] = None
-                
+
             if page_count is not None:
                 updates["page_count"] = page_count
-                
+
+            # Analytics: record precise timestamps for latency/throughput metrics
+            if status == "processing":
+                updates["started_printing_at"] = now_iso
+            elif status == "completed":
+                updates["completed_at"] = now_iso
+
             self.client.table("print_jobs").update(updates).eq("id", job_id).execute()
             self.logger.info(f"Updated Supabase job {job_id} status to '{status}'")
 
@@ -118,27 +127,67 @@ class SupabaseQueueListener(QueueListener):
     def delete_file(self, file_path, job_id=None):
         """
         Permanently deletes the PDF file from Supabase Storage after successful printing.
-        Also records the deletion timestamp in the print_jobs table if job_id is provided.
+
+        CRITICAL ORDERING:
+          1. Delete from Storage first.
+          2. Only AFTER confirmed deletion: null file_path and set file_deleted_at.
+          3. If Storage deletion fails: keep file_path intact and mark storage_cleanup_pending=True
+             so the agent can retry on next cycle without losing the reference.
+
         Logs a warning on failure but does NOT raise — deletion failure should not
         affect the job's completed status.
         """
         try:
             self.logger.info(f"Deleting cloud file '{file_path}' from Supabase Storage bucket '{config.SUPABASE_BUCKET}'...")
             self.client.storage.from_(config.SUPABASE_BUCKET).remove([file_path])
-            self.logger.info(f"Successfully deleted cloud file '{file_path}' from Supabase Storage.")
-            # Record deletion timestamp in database for audit trail and null out stale file_path
+            # Storage deletion confirmed — now safe to null the reference
+            self.logger.info(f"Storage deletion confirmed for '{file_path}'.")
             if job_id:
                 try:
                     now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
                     self.client.table("print_jobs").update({
                         "file_deleted_at": now_iso,
-                        "file_path": None
+                        "file_path": None,          # Safe: storage delete confirmed above
+                        "storage_cleanup_pending": False
                     }).eq("id", job_id).execute()
-                    self.logger.info(f"Recorded file_deleted_at and nulled file_path for job {job_id}.")
+                    self.logger.info(f"Nulled file_path and recorded file_deleted_at for job {job_id}.")
                 except Exception as db_err:
-                    self.logger.warning(f"Failed to record file_deleted_at for job {job_id}: {db_err}")
+                    self.logger.warning(f"Storage deleted but failed to update DB for job {job_id}: {db_err}")
         except Exception as e:
-            self.logger.warning(f"Failed to delete cloud file '{file_path}' from Supabase Storage: {e}. File may need manual cleanup.")
+            # Storage deletion FAILED — do NOT null file_path so we can retry later
+            self.logger.warning(
+                f"Storage deletion failed for '{file_path}': {e}. "
+                f"file_path retained in DB. Marking storage_cleanup_pending=True for retry."
+            )
+            if job_id:
+                try:
+                    self.client.table("print_jobs").update({
+                        "storage_cleanup_pending": True  # Agent will retry on next cycle
+                    }).eq("id", job_id).execute()
+                except Exception as db_err:
+                    self.logger.warning(f"Failed to mark storage_cleanup_pending for job {job_id}: {db_err}")
+
+    def retry_pending_deletions(self):
+        """
+        Retries storage deletions for jobs where storage_cleanup_pending=True.
+        Called periodically by the main agent loop.
+        On success: nulls file_path and clears the flag.
+        On continued failure: leaves flag set for the next retry cycle.
+        """
+        try:
+            response = self.client.table("print_jobs") \
+                .select("id, file_path") \
+                .eq("storage_cleanup_pending", True) \
+                .not_.is_("file_path", None) \
+                .execute()
+            pending = response.data or []
+            if not pending:
+                return
+            self.logger.info(f"Retrying storage deletion for {len(pending)} pending job(s).")
+            for job in pending:
+                self.delete_file(job["file_path"], job_id=job["id"])
+        except Exception as e:
+            self.logger.warning(f"retry_pending_deletions failed: {e}")
 
     def send_heartbeat(self, bw_printer="", color_printer=""):
         """Updates last_seen_at and printer destinations in shops table to prove agent is online."""
