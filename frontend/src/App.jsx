@@ -255,6 +255,8 @@ Agent Status: ${shopData ? (agentOnline ? 'Online' : 'Offline') : 'N/A'}`;
 
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/kiosk/:shopCode" element={<Home />} />
+        <Route path="/kiosk" element={<Home />} />
         <Route path="/status/:jobId" element={<Status />} />
         <Route path="/shop/:shopId" element={<Shop />} />
         <Route path="/shop/:shopId/console" element={<ShopConsole />} />

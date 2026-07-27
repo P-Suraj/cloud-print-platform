@@ -137,10 +137,20 @@ class SupabaseQueueListener(QueueListener):
         except Exception as e:
             self.logger.warning(f"Failed to delete cloud file '{file_path}' from Supabase Storage: {e}. File may need manual cleanup.")
 
-    def send_heartbeat(self):
-        """Updates last_seen_at in shops table to prove agent is online."""
+    def send_heartbeat(self, bw_printer="", color_printer=""):
+        """Updates last_seen_at and printer destinations in shops table to prove agent is online."""
         try:
             now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-            self.client.table("shops").update({"last_seen_at": now_iso}).eq("id", config.SHOP_ID).execute()
+            update_payload = {"last_seen_at": now_iso}
+            if bw_printer:
+                update_payload["printer_bw"] = bw_printer
+            if color_printer:
+                update_payload["printer_color"] = color_printer
+
+            # Update by shop ID
+            res = self.client.table("shops").update(update_payload).eq("id", config.SHOP_ID).execute()
+            # Also update by shop_code if SHOP_ID is set to a code like TST001
+            if not res.data:
+                self.client.table("shops").update(update_payload).eq("shop_code", config.SHOP_ID).execute()
         except Exception as e:
             self.logger.warning(f"Failed to send heartbeat to Supabase: {e}")
