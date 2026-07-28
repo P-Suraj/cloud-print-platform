@@ -497,7 +497,7 @@ export default function Home() {
               file_path: storagePath,
               file_name: currentFile.name,
               copies: copies,
-              page_count: filePageCount || 1,
+              page_count: filePageCount || Math.round((pageCount || 1) / files.length) || 1,
               status: printMode === 'auto' ? 'approved' : 'queued',
               color_mode: colorMode,
               duplex: duplex,
