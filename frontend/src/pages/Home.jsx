@@ -4,6 +4,38 @@ import { supabase } from '../services/supabase';
 import { getPdfPageCount } from '../services/pdfCounter';
 import { UploadIcon, FileIcon } from '../components/Icons';
 
+// Reads page count from a .docx file without any library.
+// .docx is a ZIP — we extract docProps/app.xml which Word writes with <Pages> count.
+async function getDocxPageCount(file) {
+  try {
+    const { BlobReader, ZipReader, TextWriter } = await import('https://cdn.jsdelivr.net/npm/@zip.js/zip.js@2.7.52/+esm');
+    const reader = new ZipReader(new BlobReader(file));
+    const entries = await reader.getEntries();
+    const appXml = entries.find(e => e.filename === 'docProps/app.xml');
+    if (appXml) {
+      const text = await appXml.getData(new TextWriter());
+      const match = text.match(/<Pages>(\d+)<\/Pages>/);
+      if (match) {
+        await reader.close();
+        return parseInt(match[1], 10);
+      }
+    }
+    // Fallback: estimate from paragraph count in document.xml (~40 paragraphs/page)
+    const docXml = entries.find(e => e.filename === 'word/document.xml');
+    if (docXml) {
+      const text = await docXml.getData(new TextWriter());
+      const paraCount = (text.match(/<w:p[ >]/g) || []).length;
+      await reader.close();
+      return Math.max(1, Math.ceil(paraCount / 40));
+    }
+    await reader.close();
+  } catch (err) {
+    console.warn('docx page count failed:', err);
+  }
+  return null;
+}
+
+
 function loadPdfDocument(file) {
   return new Promise((resolve, reject) => {
     if (!window.pdfjsLib) {
@@ -388,8 +420,26 @@ export default function Home() {
           totalPages += 1;
           counts.push(1);
         } else {
-          unresolved = true;
-          counts.push(null);
+          // Word docs (.docx/.doc) — read page count from the ZIP XML
+          const isDocx = f.name.toLowerCase().endsWith('.docx') || f.name.toLowerCase().endsWith('.doc');
+          if (isDocx) {
+            try {
+              const pages = await getDocxPageCount(f);
+              if (pages) {
+                totalPages += pages;
+                counts.push(pages);
+              } else {
+                unresolved = true;
+                counts.push(null);
+              }
+            } catch {
+              unresolved = true;
+              counts.push(null);
+            }
+          } else {
+            unresolved = true;
+            counts.push(null);
+          }
         }
       }
 
