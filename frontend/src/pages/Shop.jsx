@@ -648,8 +648,15 @@ export default function Shop() {
   const formatTime = (timeStr) => {
     if (!timeStr) return '';
     try {
-      const date = new Date(timeStr);
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const dt = new Date(timeStr);
+      const now = new Date();
+      const isToday = dt.toDateString() === now.toDateString();
+      const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+      const isYesterday = dt.toDateString() === yesterday.toDateString();
+      const time = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      if (isToday) return `Today, ${time}`;
+      if (isYesterday) return `Yesterday, ${time}`;
+      return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + ', ' + time;
     } catch {
       return '';
     }

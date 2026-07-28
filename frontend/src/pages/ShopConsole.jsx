@@ -14,8 +14,16 @@ const statusLabels = {
   rejected: 'Rejected'
 };
 
-function formatTime(d) {
-  return new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+function formatTime(ts) {
+  const dt = new Date(ts);
+  const now = new Date();
+  const isToday = dt.toDateString() === now.toDateString();
+  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+  const isYesterday = dt.toDateString() === yesterday.toDateString();
+  const time = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (isToday) return `Today, ${time}`;
+  if (isYesterday) return `Yesterday, ${time}`;
+  return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + ', ' + time;
 }
 
 export default function ShopConsole() {
