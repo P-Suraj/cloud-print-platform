@@ -903,8 +903,16 @@ export default function Shop() {
                     /* Active Online State showing printer client status */
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
                       <SignalLabel label="Agent Status" value="CONNECTED" color="var(--success)" />
-                      <SignalLabel label="B&W Destination" value={printerBw || 'Not Linked'} />
-                      <SignalLabel label="Color Destination" value={printerColor || 'Not Linked'} />
+                      <SignalLabel
+                        label="B&W Destination"
+                        value={printerBw || 'Not Configured'}
+                        color={printerBw ? 'var(--text)' : 'var(--warning)'}
+                      />
+                      <SignalLabel
+                        label="Color Destination"
+                        value={printerColor || 'Not Configured'}
+                        color={printerColor ? 'var(--text)' : 'var(--warning)'}
+                      />
                     </div>
                   ) : (
                     /* Offline State with guides and links */

@@ -193,11 +193,13 @@ class SupabaseQueueListener(QueueListener):
         """Updates last_seen_at and printer destinations in shops table to prove agent is online."""
         try:
             now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-            update_payload = {"last_seen_at": now_iso}
-            if bw_printer:
-                update_payload["printer_bw"] = bw_printer
-            if color_printer:
-                update_payload["printer_color"] = color_printer
+            update_payload = {
+                "last_seen_at": now_iso,
+                # Always write printer names — even empty string — so the dashboard
+                # can distinguish 'connected but no printer configured' from 'never reported'.
+                "printer_bw": bw_printer or None,
+                "printer_color": color_printer or None,
+            }
 
             # Update by shop ID
             res = self.client.table("shops").update(update_payload).eq("id", config.SHOP_ID).execute()
