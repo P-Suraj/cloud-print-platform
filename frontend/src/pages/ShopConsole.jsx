@@ -51,6 +51,7 @@ export default function ShopConsole() {
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState('');
   const [verifyingPin, setVerifyingPin] = useState(false);
+  const [clearingQueue, setClearingQueue] = useState(false);
 
   useEffect(() => {
     if (localStorage.getItem(`autoprint_shop_auth_${shopId}`) === 'true') {
@@ -178,6 +179,33 @@ export default function ShopConsole() {
       }
     } catch (err) {
       console.error('Error clearing job from recent:', err);
+    }
+  };
+
+  const handleClearQueue = async () => {
+    const queryId = realShopId || shopId;
+    const count = jobs.filter(j => j.status === 'queued').length;
+    if (count === 0) return;
+    const confirmed = window.confirm(
+      `Reject all ${count} pending job${count > 1 ? 's' : ''} in the queue?\n\nCustomers will see their job as Rejected. This cannot be undone.`
+    );
+    if (!confirmed) return;
+    setClearingQueue(true);
+    try {
+      const { error: err } = await supabase
+        .from('print_jobs')
+        .update({ status: 'rejected' })
+        .eq('shop_id', queryId)
+        .eq('status', 'queued');
+      if (err) {
+        console.error('Error clearing queue:', err);
+      } else {
+        fetchJobs(queryId);
+      }
+    } catch (err) {
+      console.error('Error clearing queue:', err);
+    } finally {
+      setClearingQueue(false);
     }
   };
 
@@ -458,11 +486,37 @@ export default function ShopConsole() {
         
         {/* Left Column: Full list of Pending Approvals with big buttons */}
         <div className="console-panel">
-          <div className="console-panel-header">
+          <div className="console-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <PrinterIcon size={20} color="var(--primary-light)" />
               <span style={{ fontSize: '1.1rem', fontWeight: '800' }}>Pending Approval Queue ({queuedJobs.length})</span>
             </div>
+            {queuedJobs.length > 0 && (
+              <button
+                onClick={handleClearQueue}
+                disabled={clearingQueue}
+                style={{
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  border: '1px solid var(--warning)',
+                  color: 'var(--warning)',
+                  fontSize: '0.75rem',
+                  fontWeight: '700',
+                  padding: '5px 12px',
+                  borderRadius: 6,
+                  cursor: clearingQueue ? 'not-allowed' : 'pointer',
+                  opacity: clearingQueue ? 0.6 : 1,
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  whiteSpace: 'nowrap'
+                }}
+                onMouseEnter={e => { if (!clearingQueue) e.currentTarget.style.background = 'rgba(245,158,11,0.2)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(245,158,11,0.1)'; }}
+              >
+                {clearingQueue ? '⏳ Clearing...' : `🗑️ Clear Queue (${queuedJobs.length})`}
+              </button>
+            )}
           </div>
 
           <div className="console-scroll-list">
