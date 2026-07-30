@@ -173,6 +173,7 @@ export default function Home() {
   const [paperSize, setPaperSize] = useState('A4');
   const [pagesPerSheet, setPagesPerSheet] = useState(1);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [jobLabel, setJobLabel] = useState(''); // Optional friendly name for the print job
   const [layoutMode, setLayoutMode] = useState('document');
   const [frontFile, setFrontFile] = useState(null);
   const [backFile, setBackFile] = useState(null);
@@ -363,7 +364,7 @@ export default function Home() {
     const selectedFiles = Array.from(e.target.files || []);
     if (selectedFiles.length === 0) return;
 
-    const MAX_FILE_SIZE_BYTES = 30 * 1024 * 1024; // 30 MB
+    const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
 
     const allowedTypes = [
       'application/pdf',
@@ -385,17 +386,18 @@ export default function Home() {
       return;
     }
 
-    // Validate file sizes
+    // Validate file sizes — hard block at 50 MB
     const oversizedFiles = selectedFiles.filter(f => f.size > MAX_FILE_SIZE_BYTES);
     if (oversizedFiles.length > 0) {
       const names = oversizedFiles.map(f => f.name).join(', ');
-      setError(`File too large (max 30 MB): ${names}`);
+      setError(`⚠️ File too large — maximum allowed size is 50 MB. Please compress or split: ${names}`);
       setFiles([]);
       return;
     }
 
     setError('');
     setFiles([]);
+    setJobLabel(''); // Reset label when a new file set is chosen
     setProcessingPdf(true);
 
     try {
@@ -447,6 +449,17 @@ export default function Home() {
       setIndividualPageCounts(counts);
       setFiles(selectedFiles);
       setActivePreviewIndex(0);
+
+      // Auto-derive a clean job label from the first filename:
+      // Strip extension, remove trailing UUID/hash-like suffixes (e.g. _a3f1b2c9), trim.
+      if (selectedFiles.length > 0) {
+        const rawName = selectedFiles[0].name.replace(/\.[^.]+$/, ''); // strip ext
+        const cleaned = rawName
+          .replace(/_[a-f0-9]{6,}$/i, '')  // strip trailing hash suffix
+          .replace(/[-_]+$/, '')           // strip trailing dashes/underscores
+          .trim();
+        setJobLabel(cleaned.length > 0 ? cleaned : '');
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -474,6 +487,7 @@ export default function Home() {
     setPageCount(unresolved ? null : totalPages);
     setIndividualPageCounts(newCounts);
     setFiles(newFiles);
+    if (newFiles.length === 0) setJobLabel(''); // Clear label when all files removed
     
     // Adjust activePreviewIndex if it's now out of bounds
     if (activePreviewIndex >= newFiles.length) {
@@ -528,14 +542,40 @@ export default function Home() {
             throw new Error(`Failed to upload file '${currentFile.name}' to queue. Please try again.`);
           }
 
-          // Resolve page count of individual PDF
+          // Resolve the display name for this file:
+          // Use the jobLabel (trimmed) if the user provided one, preserving the original extension.
+          // For multi-file uploads only the first file inherits the label; rest use original names.
+          const originalExt = currentFile.name.substring(currentFile.name.lastIndexOf('.')) || '';
+          const trimmedLabel = jobLabel.trim();
+          const resolvedFileName = (trimmedLabel && files.indexOf(currentFile) === 0)
+            ? `${trimmedLabel}${originalExt}`
+            : currentFile.name;
+
+          // Re-resolve page count of this individual PDF at submit time
+          // (It was already counted at file-select; this is a safety re-check before
+          // writing to the database — we must never write 1 as a silent guess.)
           let filePageCount = null;
           if (currentFile.type === 'application/pdf') {
             try {
               filePageCount = await getPdfPageCount(currentFile);
             } catch (err) {
-              console.warn(err);
+              console.warn('[Submit] PDF page count re-check failed for:', currentFile.name, err);
             }
+          } else if (currentFile.type.startsWith('image/')) {
+            filePageCount = 1; // Images always yield exactly 1 page
+          } else {
+            // Word docs: use the count already resolved at file-select time, from individualPageCounts
+            const fileIndex = files.indexOf(currentFile);
+            filePageCount = individualPageCounts[fileIndex] ?? null;
+          }
+
+          // Hard block: do NOT submit with an unresolved page count.
+          // An unknown count would produce wrong pricing and corrupt the ledger.
+          if (filePageCount === null || filePageCount === undefined || filePageCount < 1) {
+            throw new Error(
+              `Could not determine page count for "${currentFile.name}". ` +
+              `Please remove and re-add the file, or try a different PDF.`
+            );
           }
 
           // 2. Insert row to print_jobs
@@ -545,9 +585,9 @@ export default function Home() {
               id: jobId,
               shop_id: shopId,
               file_path: storagePath,
-              file_name: currentFile.name,
+              file_name: resolvedFileName,
               copies: copies,
-              page_count: filePageCount || Math.round((pageCount || 1) / files.length) || 1,
+              page_count: filePageCount,
               status: printMode === 'auto' ? 'approved' : 'queued',
               color_mode: colorMode,
               duplex: duplex,
@@ -1461,10 +1501,87 @@ export default function Home() {
             <>
               <div className="upload-icon-wrap"><UploadIcon size={28} /></div>
               <p className="upload-title">Select Documents</p>
-              <p className="upload-hint">Tap to browse files (Maximum 20MB)</p>
+              <p className="upload-hint">Tap to browse files (Maximum 50MB)</p>
               <button className="upload-btn" type="button">Choose Files</button>
             </>
           )}
+        </div>
+      )}
+
+      {/* Optional Job Label — shown after document files are selected */}
+      {layoutMode === 'document' && files.length > 0 && !processingPdf && (
+        <div style={{
+          marginTop: 10,
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+          padding: '10px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+          animation: 'fadeUp 0.25s ease'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <label
+              htmlFor="job-label-input"
+              style={{
+                fontSize: '0.8rem',
+                fontWeight: '600',
+                color: 'var(--text-secondary)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                cursor: 'default'
+              }}
+            >
+              ✏️ Job Label
+            </label>
+            <span style={{
+              fontSize: '0.68rem',
+              fontWeight: '600',
+              color: 'var(--text-muted)',
+              background: 'rgba(139,92,246,0.1)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-pill)',
+              padding: '2px 8px',
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase'
+            }}>Optional</span>
+          </div>
+          <input
+            id="job-label-input"
+            type="text"
+            value={jobLabel}
+            onChange={e => {
+              const val = e.target.value.replace(/[/\\]/g, '').substring(0, 80);
+              setJobLabel(val);
+            }}
+            placeholder={files[0]?.name.replace(/\.[^.]+$/, '') || 'e.g. Semester 4 Notes'}
+            maxLength={80}
+            style={{
+              width: '100%',
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--text)',
+              fontSize: '0.88rem',
+              padding: '9px 12px',
+              outline: 'none',
+              fontFamily: 'var(--font)',
+              transition: 'border-color 0.18s ease, box-shadow 0.18s ease',
+            }}
+            onFocus={e => {
+              e.target.style.borderColor = 'var(--primary-light)';
+              e.target.style.boxShadow = '0 0 0 3px var(--primary-dim)';
+            }}
+            onBlur={e => {
+              e.target.style.borderColor = 'var(--border)';
+              e.target.style.boxShadow = 'none';
+            }}
+          />
+          <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
+            This name appears on the shopkeeper's console. Leave blank to use the original filename.
+          </p>
         </div>
       )}
 

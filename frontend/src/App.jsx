@@ -194,7 +194,7 @@ Agent Status: ${shopData ? (agentOnline ? 'Online' : 'Offline') : 'N/A'}`;
       job_id: targetJob.id || null,
       file_name: targetJob.file_name || null,
       doc_format: fileExt,
-      page_count: targetJob.page_count || 1,
+      page_count: targetJob.page_count ?? null,
       copies: targetJob.copies || 1,
       color_mode: targetJob.color_mode || 'bw',
       duplex: targetJob.duplex || false,

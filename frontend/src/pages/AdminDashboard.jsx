@@ -109,7 +109,9 @@ export default function AdminDashboard() {
         if (jobs) {
           totalJobs = jobs.length;
           totalRevenue = jobs.reduce((sum, j) => {
-            const pages = (j.page_count || 1) * (j.copies || 1);
+            // Skip jobs with unknown page counts — don't guess 1 page and corrupt totals
+            if (!j.page_count || j.page_count < 1) return sum;
+            const pages = j.page_count * (j.copies || 1);
             const rate = j.color_mode === 'color' ? 5.0 : 2.0;
             return sum + pages * rate;
           }, 0);
@@ -490,7 +492,7 @@ export default function AdminDashboard() {
                       </div>
                       <div>
                         <span style={{ color: 'var(--text-muted)' }}>Page Count:</span>{' '}
-                        <strong>{report.page_count || 1} p ({report.copies || 1} copies)</strong>
+                        <strong>{report.page_count ? `${report.page_count} p` : '? p'} ({report.copies || 1} copies)</strong>
                       </div>
                       <div>
                         <span style={{ color: 'var(--text-muted)' }}>Color Mode:</span>{' '}

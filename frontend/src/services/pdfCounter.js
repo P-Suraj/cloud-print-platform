@@ -4,8 +4,8 @@
  */
 export async function getPdfPageCount(file) {
   return new Promise((resolve, reject) => {
-    if (file.size > 20 * 1024 * 1024) {
-      return reject(new Error('File exceeds the maximum size limit of 20MB.'));
+    if (file.size > 50 * 1024 * 1024) {
+      return reject(new Error('File exceeds the maximum size limit of 50MB.'));
     }
 
     if (!window.pdfjsLib) {
@@ -55,8 +55,8 @@ function parsePdf(file, resolve, reject) {
  */
 export async function getPdfDetails(file) {
   return new Promise((resolve, reject) => {
-    if (file.size > 20 * 1024 * 1024) {
-      return reject(new Error('File exceeds the maximum size limit of 20MB.'));
+    if (file.size > 50 * 1024 * 1024) {
+      return reject(new Error('File exceeds the maximum size limit of 50MB.'));
     }
 
     if (!window.pdfjsLib) {

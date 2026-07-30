@@ -67,7 +67,14 @@ export function DemoProvider({ children }) {
       return;
     }
     const rate = state.colorMode === 'color' ? COLOR_RATE : BW_RATE;
-    const effectivePages = state.file.pageCount || 1;
+    const effectivePages = state.file.pageCount;
+    // If page count is unresolved (PDF failed to load), show 0 rather than silently using 1
+    if (!effectivePages || effectivePages < 1) {
+      if (state.calculatedPrice !== '0.00') {
+        setState(s => ({ ...s, calculatedPrice: '0.00' }));
+      }
+      return;
+    }
     let total = effectivePages * state.copies * rate;
     if (state.duplex) {
       total = total * 0.9;
