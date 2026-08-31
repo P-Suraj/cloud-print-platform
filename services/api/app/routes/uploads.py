@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException, Header, Body
 from pydantic import BaseModel
+from postgrest.exceptions import APIError
+import logging
 import secrets
 import hashlib
 import time
@@ -12,6 +14,7 @@ from app.pdf_validation import validate_pdf_bytes
 from app.settings import settings
 
 router = APIRouter(prefix="/api/v3/orders", tags=["Uploads"])
+logger = logging.getLogger("autoprint.uploads")
 
 
 class UploadIntentRequest(BaseModel):
@@ -190,10 +193,27 @@ async def finalize_upload(
     # upload. The old approach called process_single_preparation_task() which
     # re-downloaded the same bytes from Storage, doubling I/O and reliably
     # exceeding Vercel's 60-second function timeout for any non-trivial PDF.
-    task_res = client.rpc("claim_preparation_task", {
-        "p_worker_id": "api-inline",
-        "p_lease_seconds": 90,
-    }).execute()
+    try:
+        task_res = client.rpc("claim_preparation_task_for_document", {
+            "p_source_document_id": source_document_id,
+            "p_worker_id": "api-inline",
+            "p_lease_seconds": 90,
+        }).execute()
+    except APIError as exc:
+        # Keep the operational error observable without logging customer data,
+        # capabilities, URLs, or document identifiers.
+        logger.error(
+            "preparation_claim_rpc_failed rpc=%s postgrest_code=%r message=%r details=%r hint=%r",
+            "claim_preparation_task_for_document",
+            exc.code,
+            exc.message,
+            exc.details,
+            exc.hint,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Your PDF could not be prepared. Please try again.",
+        ) from exc
 
     if not task_res.data:
         # finalize_source_document should have created the task; not finding it

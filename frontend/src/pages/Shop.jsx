@@ -592,7 +592,7 @@ export default function Shop() {
   // Render counter QR sign canvas
   useEffect(() => {
     if (!loading && canvasRef.current && shopCode) {
-      const kioskUrl = `${window.location.origin}/kiosk/${shopCode}`;
+      const kioskUrl = `${window.location.origin}/print/${shopCode}?entry=qr`;
       try {
         const qr = generate(kioskUrl);
         const canvas = canvasRef.current;

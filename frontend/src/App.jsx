@@ -14,6 +14,18 @@ import Files from './pages/Files';
 import Payments from './pages/Payments';
 import ShopLedger from './pages/ShopLedger';
 import AdminDashboard from './pages/AdminDashboard';
+import CustomerPrint from './pages/v3/CustomerPrint';
+import CustomerStatus from './pages/v3/CustomerStatus';
+import ShopLogin from './pages/v3/ShopLogin';
+import ShopQueue from './pages/v3/ShopQueue';
+import ShopJob from './pages/v3/ShopJob';
+import ShopPickups from './pages/v3/ShopPickups';
+import ShopPickupPolicy from './pages/v3/ShopPickupPolicy';
+import ShopQueueSettings from './pages/v3/ShopQueueSettings';
+import CustomerDiscovery from './pages/v3/CustomerDiscovery';
+import V3Layout from './pages/v3/V3Layout';
+import PilotShopDashboard from './pages/v3/PilotShopDashboard';
+import ShopManagement from './pages/v3/ShopManagement';
 
 function InDevelopmentPage() {
   const navigate = useNavigate();
@@ -47,6 +59,12 @@ function InDevelopmentPage() {
 function App() {
   const location = useLocation();
   const isDemo = location.pathname.startsWith('/demo');
+  const isV3 = location.pathname.startsWith('/v3');
+  const isMainCustomer = location.pathname === '/'
+    || location.pathname === '/print'
+    || location.pathname.startsWith('/print/')
+    || location.pathname === '/discover'
+    || location.pathname.startsWith('/order/');
 
   const [shopData, setShopData] = useState(null);
   const [agentOnline, setAgentOnline] = useState(false);
@@ -242,6 +260,46 @@ Agent Status: ${shopData ? (agentOnline ? 'Online' : 'Offline') : 'N/A'}`;
     );
   }
 
+  if (isMainCustomer) {
+    return (
+      <Routes>
+        <Route element={<V3Layout />}>
+          <Route path="/" element={<CustomerPrint />} />
+          <Route path="/print" element={<CustomerPrint />} />
+          <Route path="/print/:shopCode" element={<CustomerPrint />} />
+          <Route path="/discover" element={<CustomerDiscovery />} />
+          <Route path="/order/:orderId" element={<CustomerStatus />} />
+        </Route>
+      </Routes>
+    );
+  }
+
+  if (isV3) {
+    return (
+      <Routes>
+        <Route path="/v3" element={<V3Layout />}>
+          <Route path="print" element={<CustomerPrint />} />
+          <Route path="print/:shopCode" element={<CustomerPrint />} />
+          <Route path="status/:orderId" element={<CustomerStatus />} />
+          <Route path="console/login" element={<ShopLogin />} />
+            <Route path="console/queue" element={<ShopQueue />} />
+            <Route path="console/queue-settings" element={<ShopQueueSettings />} />
+          <Route path="console/pickups" element={<ShopPickups />} />
+          <Route path="console/pickup-policy" element={<ShopPickupPolicy />} />
+          <Route path="console/job/:jobId" element={<ShopJob />} />
+          <Route path="console/:shopId/dashboard" element={<PilotShopDashboard />} />
+          <Route path="console/:shopId/shms" element={<ShopManagement />} />
+          <Route path="console/:shopId/production" element={<JobBoard />} />
+          <Route path="console/:shopId/customers" element={<Customers />} />
+          <Route path="console/:shopId/files" element={<Files />} />
+          <Route path="console/:shopId/payments" element={<Payments />} />
+          <Route path="console/:shopId/ledger" element={<ShopLedger />} />
+          <Route path="console/:shopId/rates" element={<ShopRates />} />
+        </Route>
+      </Routes>
+    );
+  }
+
   return (
     <div className="app-shell">
       <header className="header">
@@ -256,6 +314,15 @@ Agent Status: ${shopData ? (agentOnline ? 'Online' : 'Offline') : 'N/A'}`;
         <Route path="/kiosk/:shopCode" element={<Home />} />
         <Route path="/kiosk" element={<Home />} />
         <Route path="/status/:jobId" element={<Status />} />
+        <Route path="/v3/print" element={<CustomerPrint />} />
+        <Route path="/v3/print/:shopCode" element={<CustomerPrint />} />
+        <Route path="/v3/status/:orderId" element={<CustomerStatus />} />
+        <Route path="/v3/console/login" element={<ShopLogin />} />
+        <Route path="/v3/console/queue" element={<ShopQueue />} />
+        <Route path="/v3/console/queue-settings" element={<ShopQueueSettings />} />
+        <Route path="/v3/console/pickups" element={<ShopPickups />} />
+        <Route path="/v3/console/pickup-policy" element={<ShopPickupPolicy />} />
+        <Route path="/v3/console/job/:jobId" element={<ShopJob />} />
         <Route path="/shop/:shopId" element={<Shop />} />
         <Route path="/shop/:shopId/console" element={<ShopConsole />} />
         <Route path="/shop/:shopId/rates" element={<ShopRates />} />

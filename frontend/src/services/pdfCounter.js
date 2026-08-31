@@ -2,6 +2,29 @@
  * Client-side PDF page counter and validation engine.
  * Loads pdf.js dynamically from CDN to bypass Vite worker bundling issues.
  */
+export async function loadPdfDocument(file) {
+  if (!file) throw new Error('Choose a PDF first.');
+  if (!window.pdfjsLib) {
+    await new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[data-autoprint-pdfjs]');
+      if (existing) {
+        existing.addEventListener('load', resolve, { once: true });
+        existing.addEventListener('error', reject, { once: true });
+        return;
+      }
+      const script = document.createElement('script');
+      script.dataset.autoprintPdfjs = 'true';
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js';
+      script.onload = resolve;
+      script.onerror = () => reject(new Error('Failed to load PDF preview.'));
+      document.head.appendChild(script);
+    });
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  return window.pdfjsLib.getDocument({ data: bytes }).promise;
+}
+
 export async function getPdfPageCount(file) {
   return new Promise((resolve, reject) => {
     if (file.size > 50 * 1024 * 1024) {

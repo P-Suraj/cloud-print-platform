@@ -3,15 +3,18 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 export default function ShopNav() {
   const { shopId } = useParams();
   const location = useLocation();
+  const isV3 = location.pathname.startsWith('/v3/console');
+  const path = (page) => isV3 ? `/v3/console/${shopId}/${page}` : `/shop/${shopId}/${page}`;
 
   const links = [
-    { name: 'Dashboard', path: `/shop/${shopId}/dashboard` },
-    { name: 'Job Board', path: `/shop/${shopId}/jobs` },
-    { name: 'Print Queue', path: `/shop/${shopId}/console` }, // Existing console
-    { name: 'Customers', path: `/shop/${shopId}/customers` },
-    { name: 'Files', path: `/shop/${shopId}/files` },
-    { name: 'Payments', path: `/shop/${shopId}/payments` },
-    { name: 'Settings', path: `/shop/${shopId}/rates` }
+    { name: 'Dashboard', path: path('dashboard') },
+    { name: 'Production', path: path('production') },
+    { name: 'Print Queue', path: isV3 ? '/v3/console/queue' : `/shop/${shopId}/console` },
+    { name: 'Customers', path: path('customers') },
+    { name: 'Files', path: path('files') },
+    { name: 'Payments', path: path('payments') },
+    { name: 'Ledger', path: path('ledger') },
+    { name: 'Rates', path: path('rates') }
   ];
 
   return (

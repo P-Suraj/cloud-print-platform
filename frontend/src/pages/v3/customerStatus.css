@@ -1,0 +1,31 @@
+.v3-status-page { position:relative; width:min(100% - 40px, 900px); margin:0 auto; padding:54px 0 80px; color:#172033; }
+.v3-status-page::before { content:""; position:fixed; inset:0; z-index:-1; background:#f7f8fa; }
+.v3-status-header { padding-bottom:28px; border-bottom:1px solid #dfe3e8; }
+.v3-status-shop { margin:0 0 7px; color:#667085; font-size:.78rem; font-weight:650; }
+.v3-status-header h1 { margin:0; color:#172033; font-size:clamp(1.55rem,5vw,2rem); line-height:1.18; letter-spacing:-.025em; overflow-wrap:anywhere; }
+.v3-current-status { margin-top:27px; padding-left:14px; border-left:3px solid #d85c2d; }
+.v3-current-status span { display:block; color:#a43d18; font-size:.72rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+.v3-current-status p { margin:4px 0 0; color:#4b5565; font-size:.91rem; line-height:1.45; }
+.v3-current-status.exception { border-color:#a33b32; }.v3-current-status.exception span { color:#8e3029; }
+.v3-status-section { padding:28px 0; border-bottom:1px solid #dfe3e8; }
+.v3-status-content { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:48px; border-bottom:1px solid #dfe3e8; }
+.v3-status-content .v3-status-section { border-bottom:0; }
+.v3-status-section h2 { margin:0 0 20px; color:#475467; font-size:.74rem; font-weight:800; letter-spacing:.075em; text-transform:uppercase; }
+.v3-lifecycle { list-style:none; margin:0; padding:0; }
+.v3-lifecycle li { position:relative; display:grid; grid-template-columns:28px 1fr; gap:12px; min-height:64px; color:#98a1af; }
+.v3-lifecycle li:not(:last-child)::after { content:""; position:absolute; left:11px; top:25px; bottom:5px; border-left:1px solid #d5dae1; }
+.v3-step-marker { position:relative; z-index:1; display:grid; place-items:center; width:23px; height:23px; box-sizing:border-box; border:1px solid #cbd1d9; border-radius:50%; background:#f7f8fa; color:transparent; font-size:.72rem; }
+.v3-lifecycle strong { display:block; padding-top:2px; color:inherit; font-size:.94rem; font-weight:700; }
+.v3-lifecycle small { display:block; margin-top:3px; color:#7a8493; font-size:.78rem; line-height:1.4; }
+.v3-lifecycle li.completed { color:#257452; }.v3-lifecycle li.completed .v3-step-marker { color:#fff; border-color:#257452; background:#257452; }
+.v3-lifecycle li.active { color:#172033; }.v3-lifecycle li.active .v3-step-marker { color:#d85c2d; border:2px solid #d85c2d; background:#f7f8fa; font-size:.55rem; }
+.v3-document-list { list-style:none; display:grid; gap:0; margin:0; padding:0; }
+.v3-document-list li { display:grid; grid-template-columns:20px 1fr; gap:11px; padding:13px 0; border-top:1px solid #e4e7eb; }.v3-document-list li:first-child { border-top:0; padding-top:0; }
+.v3-document-list svg { margin-top:2px; color:#697386; }.v3-document-list strong { display:block; color:#263244; font-size:.86rem; overflow-wrap:anywhere; }.v3-document-list small { display:block; margin-top:4px; color:#6f7988; font-size:.74rem; line-height:1.4; }
+.v3-ready-note { margin:22px 0 0; padding:13px 0; color:#246b4d; font-size:.86rem; font-weight:650; }
+.v3-status-action { margin:22px 0 0; padding:15px 0; border-top:1px solid #dfe3e8; color:#344054; }.v3-status-action p { margin:0 0 10px; font-size:.78rem; }.v3-status-action button,.v3-status-link { display:inline-flex; align-items:center; gap:7px; min-height:40px; padding:9px 13px; border:1px solid #344054; border-radius:5px; color:#fff; background:#344054; font:inherit; font-size:.77rem; font-weight:700; text-decoration:none; cursor:pointer; }.v3-status-action.danger button { border-color:#8e392f; color:#8e392f; background:transparent; }
+.v3-status-action-error,.v3-status-refresh-warning { color:#8e392f; font-size:.76rem; }.v3-status-refresh-warning { padding:10px 0; border-top:1px solid #ead8d5; }
+.v3-auto-update { display:flex; align-items:center; gap:8px; margin:22px 0 0; color:#7a8493; font-size:.7rem; }.v3-auto-update span { width:6px; height:6px; border-radius:50%; background:#398161; }
+.v3-status-message { text-align:left; }.v3-status-message h1 { margin:13px 0 5px; font-size:1.35rem; }.v3-status-message p { color:#667085; }.v3-status-message .v3-status-link { margin-top:14px; }
+@media (max-width:720px) { .v3-status-page { width:min(100% - 36px,600px); padding:34px 0 55px; }.v3-status-header { padding-bottom:24px; }.v3-status-content { display:block; border-bottom:0; }.v3-status-content .v3-status-section { padding:24px 0; border-bottom:1px solid #dfe3e8; }.v3-lifecycle li { min-height:61px; } }
+@media (prefers-reduced-motion:reduce) { .v3-status-page * { animation:none!important; transition:none!important; } }
